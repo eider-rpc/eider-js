@@ -1,0 +1,33 @@
+{
+  "name": "eider",
+  "version": "0.9.4",
+  "description": "An object-oriented, asynchronous, late-binding, web-first, polyglot RPC protocol",
+  "homepage": "https://github.com/eider-rpc/eider-js",
+  "main": "eider-rpc.js",
+  "scripts": {
+    "test": "mocha",
+    "lint": "eslint eider-rpc.js test/test.js",
+    "minify": "babili eider-rpc.js -o eider-rpc.min.js --no-comments"
+  },
+  "keywords": [
+    "RPC"
+  ],
+  "author": "Bart Robinson <bart@bartrobinson.com>",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/eider-rpc/eider-js.git"
+  },
+  "optionalDependencies": {
+    "msgpack-lite": "^0.1.26",
+    "ws": "^1.1.1"
+  },
+  "devDependencies": {
+    "babili": "0.0.9",
+    "eslint": "^3.10.0",
+    "eslint-config-google": "^0.7.0",
+    "mocha": "^3.1.2",
+    "msgpack-lite": "^0.1.26",
+    "ws": "^1.1.1"
+  }
+}

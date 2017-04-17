@@ -1,0 +1,54 @@
+{
+    "env": {
+        "browser": true,
+        "es6": true,
+        "node": true
+    },
+    "extends": ["eslint:recommended", "google"],
+    "rules": {
+        "arrow-parens": [
+            "error",
+            "as-needed"
+        ],
+        "brace-style": [
+            "error",
+            "1tbs",
+            { "allowSingleLine": true }
+        ],
+        "comma-dangle": [
+            "error",
+            "never"
+        ],
+        "guard-for-in": [
+            "off"
+        ],
+        "indent": [
+            "error",
+            4
+        ],
+        "linebreak-style": [
+            "error",
+            "windows"
+        ],
+        "max-len": [
+            "error",
+            99
+        ],
+        "no-trailing-spaces": [
+            "error",
+            { "skipBlankLines": true }
+        ],
+        "quotes": [
+            "error",
+            "single",
+            { "avoidEscape": true }
+        ],
+        "require-jsdoc": [
+            "off"
+        ],
+        "semi": [
+            "error",
+            "always"
+        ]
+    }
+}
