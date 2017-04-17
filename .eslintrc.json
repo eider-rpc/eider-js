@@ -27,8 +27,7 @@
             4
         ],
         "linebreak-style": [
-            "error",
-            "windows"
+            "off"
         ],
         "max-len": [
             "error",
