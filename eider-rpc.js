@@ -1202,11 +1202,7 @@ limitations under the License.
         }
         
         applyFinish(rcodec, srcid, method, lsession, loid, msg) {
-            if (!lsession.objects.hasOwnProperty(loid)) {
-                throw new Errors.LookupError('Unknown object: ' + loid);
-            }
-            let lobj = lsession.objects[loid];
-            
+            let lobj = lsession.unmarshalId(loid);
             let f = getAttr(lobj, method);
             let params = ('params' in msg) ? lsession.unmarshalAll(rcodec, msg.params, srcid) : [];
             return f.apply(lobj, params);
