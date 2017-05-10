@@ -220,6 +220,14 @@ limitations under the License.
         );
     }
     
+    // Use `weak` package, if available
+    let weak;
+    try {
+        weak = require('weak');
+    } catch (exc) {
+        // weak package is optional
+    }
+    
     class Reference {
         
         constructor(ref) {
@@ -566,13 +574,55 @@ limitations under the License.
         }
     }
     
+    let closeRemoteObject = rdata => {
+        // If the session or the connection or the bridged connection is already closed, then
+        // don't throw an error, because the remote object is already dead.
+        return new Promise((resolve, reject) => {
+            if (rdata.closed || rdata.rsession.closed) {
+                resolve(); // already closed
+            } else {
+                rdata.closed = true;
+                let did;
+                try {
+                    did = rdata.rsession.call(rdata.rref, 'release');
+                } catch (exc) {
+                    if (exc instanceof Errors.DisconnectedError) {
+                        resolve(); // direct connection is already dead
+                    } else {
+                        reject(exc);
+                    }
+                }
+                if (did !== void 0) {
+                    did.then(
+                        resolve, // object successfully released
+                        exc => {
+                            if (exc instanceof Errors.DisconnectedError) {
+                                resolve(); // connection (direct or bridged) is now dead
+                            } else {
+                                reject(exc);
+                            }
+                        });
+                }
+            }
+        });  
+    };
+    
     class RemoteObject {
         
         constructor(rsession, roid) {
-            this._rsession = rsession;
-            this._roid = roid;
-            this._rref = {rsid: rsession.rsid, [OBJECT_ID]: roid};
-            this._closed = false;
+            // Add an extra level of indirection so that this's state can still be referenced after
+            // this itself is garbage-collected.
+            let rdata = {
+                rsession: rsession,
+                rref: {rsid: rsession.rsid, [OBJECT_ID]: roid},
+                closed: false
+            };
+            this._rdata = rdata;
+            
+            if (weak !== void 0) {
+                // Automatically release the remote object upon garbage collection.
+                weak(this, closeRemoteObject.bind(void 0, rdata));
+            }
             
             return new Proxy(this, {
                 get: (target, key, robj) => {
@@ -599,8 +649,8 @@ limitations under the License.
                     f.bind = function(that, ...args) {
                         let bf = Function.prototype.bind.call(this, that, ...args);
                         bf.toJSON = () => ({
-                            rsid: that._rsession.rsid,
-                            [OBJECT_ID]: that._roid,
+                            rsid: that._rdata.rref.rsid,
+                            [OBJECT_ID]: that._rdata.rref[OBJECT_ID],
                             method: key
                         });
                         return bf;
@@ -615,7 +665,7 @@ limitations under the License.
         }
         
         toJSON() {
-            return this._rref;
+            return this._rdata.rref;
         }
         
         _close() {
@@ -624,41 +674,7 @@ limitations under the License.
             // called instead of directly calling release(). Despite the leading underscore in the
             // name, client code may call this function. The underscore merely exists to
             // differentiate this from a remote method.
-            
-            // If the session or the connection or the bridged connection is already closed, then
-            // don't throw an error, because the remote object is already dead.
-            return new Promise((resolve, reject) => {
-                if (this._closed || this._rsession.closed) {
-                    resolve(); // already closed
-                } else {
-                    this._closed = true;
-                    let did;
-                    try {
-                        did = this._doclose();
-                    } catch (exc) {
-                        if (exc instanceof Errors.DisconnectedError) {
-                            resolve(); // direct connection is already dead
-                        } else {
-                            reject(exc);
-                        }
-                    }
-                    if (did !== void 0) {
-                        did.then(
-                            resolve, // object successfully released
-                            exc => {
-                                if (exc instanceof Errors.DisconnectedError) {
-                                    resolve(); // connection (direct or bridged) is now dead
-                                } else {
-                                    reject(exc);
-                                }
-                            });
-                    }
-                }
-            });
-        }
-        
-        _doclose() {
-            return this.release();
+            return closeRemoteObject(this._rdata);
         }
         
         _enter() {
@@ -871,7 +887,7 @@ limitations under the License.
     class BridgedSession extends RemoteSessionManaged {
         
         constructor(bridge, spec) {
-            super(bridge._rsession.conn, spec.rsid, spec.lformat, null, spec.dst);
+            super(bridge._rdata.rsession.conn, spec.rsid, spec.lformat, null, spec.dst);
             this.bridge = bridge;
         }
         

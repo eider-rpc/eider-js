@@ -114,6 +114,10 @@ describe('Eider', function() {
     
     class API extends Eider.LocalRoot {
         
+        numObjects() {
+            return Object.keys(this._lsession.objects).length;
+        }
+        
         call(f, ...args) {
             return f(...args);
         }
@@ -317,6 +321,34 @@ describe('Eider', function() {
                     assert.equal(exc.message, 'Cannot divide by zero');
                     assert(exc.stack.indexOf('direct cause') !== -1);
                 }
+            );
+    });
+    
+    it('release a remote object', function() {
+        return rroot.numObjects()
+            .then(n =>
+                Eider.using(rroot.new_Value(0), rval =>
+                    rroot.numObjects().then(m =>
+                        assert.equal(n + 1, m))
+                ).then(() =>
+                    rroot.numObjects().then(m =>
+                        assert.equal(n, m))
+                )
+            );
+    });
+    
+    it('garbage-collect a remote object', function () {
+        gc();
+        return rroot.numObjects()
+            .then(n =>
+                rroot.new_Value(0).then(rval =>
+                    rroot.numObjects().then(m =>
+                        assert.equal(n + 1, m))
+                ).then(() => {
+                    gc();
+                    return rroot.numObjects().then(m =>
+                        assert.equal(n, m));
+                })
             );
     });
     

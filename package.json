@@ -5,7 +5,7 @@
   "homepage": "https://github.com/eider-rpc/eider-js",
   "main": "eider-rpc.js",
   "scripts": {
-    "test": "mocha",
+    "test": "mocha --expose-gc",
     "lint": "eslint eider-rpc.js test/test.js",
     "minify": "babili eider-rpc.js -o eider-rpc.min.js --no-comments"
   },
@@ -20,6 +20,7 @@
   },
   "optionalDependencies": {
     "msgpack-lite": "^0.1.26",
+    "weak": "^1.0.1",
     "ws": "^1.1.1"
   },
   "devDependencies": {
@@ -28,6 +29,7 @@
     "eslint-config-google": "^0.7.0",
     "mocha": "^3.1.2",
     "msgpack-lite": "^0.1.26",
+    "weak": "^1.0.1",
     "ws": "^1.1.1"
   }
 }
