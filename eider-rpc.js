@@ -604,7 +604,7 @@ limitations under the License.
                         });
                 }
             }
-        });  
+        });
     };
     
     class RemoteObject {

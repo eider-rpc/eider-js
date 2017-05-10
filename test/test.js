@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+/* global gc */
 /* eslint-env node, mocha */
 
 let assert = require('assert');
@@ -337,7 +338,7 @@ describe('Eider', function() {
             );
     });
     
-    it('garbage-collect a remote object', function () {
+    it('garbage-collect a remote object', function() {
         gc();
         return rroot.numObjects()
             .then(n =>
