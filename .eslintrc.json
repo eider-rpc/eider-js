@@ -24,7 +24,10 @@
         ],
         "indent": [
             "error",
-            4
+            4,
+            {
+                "outerIIFEBody": 0
+            }
         ],
         "linebreak-style": [
             "off"
