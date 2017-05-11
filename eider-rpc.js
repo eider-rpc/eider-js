@@ -370,7 +370,7 @@ class LocalSession extends Session {
             let rsession = new RemoteSessionBase(this.conn, ref.lsid, null, srcid);
             rsession.lcodec = this.lcodec;
             let robj = rsession.unmarshalId(oid);
-            robj._closed = true; // callbacks do not need to be released
+            robj._rdata.closed = true; // callbacks do not need to be released
             return robj;
         }
         
