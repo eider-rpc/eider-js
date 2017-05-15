@@ -84,7 +84,6 @@ describe('Eider', function() {
         }
         
         iter() {
-            this.addref();
             return this;
         }
         
@@ -185,7 +184,7 @@ describe('Eider', function() {
         }
         
         getattr(obj, attr) {
-            return obj[attr].bind(obj);
+            return Eider.using(obj, o => o[attr].bind(o));
         }
         
         setTarget() {
@@ -367,6 +366,20 @@ describe('Eider', function() {
             );
     });
     
+    it('try to access a remote object after its session has been closed', function() {
+        let rval;
+        return Eider.using(conn.createSession(), rroot =>
+                rroot.new_Value(0).then(rv => {
+                    rval = rv;
+                })
+            ).then(() =>
+                rval.val()
+            ).then(
+                () => assert(false),
+                exc => assert(exc instanceof Eider.Errors.LookupError)
+            );
+    });
+    
     it('iterate over a remote object', function() {
         return aiter2array(rroot.new_Range(38, 42))
             .then(arr =>
@@ -478,6 +491,20 @@ describe('Eider', function() {
     it('call a bridged method locally', function() {
         return broot.join(' ', 'bridges    are    neat'.split(/\s+/))
             .then(s => assert.equal(s, 'bridges are neat'));
+    });
+    
+    it('try to access a bridged object after its bridge has been closed', function() {
+        let bval;
+        return Eider.using(rroot.bridge(), broot =>
+                broot.new_Value(0).then(bv => {
+                    bval = bv;
+                })
+            ).then(() =>
+                bval.val()
+            ).then(
+                () => assert(false),
+                exc => assert(exc instanceof Eider.Errors.LookupError)
+            );
     });
     
     it('call a bridged method that raises an exception', function() {

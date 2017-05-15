@@ -369,9 +369,7 @@ class LocalSession extends Session {
             // don't use a real RemoteSession, because we don't manage its lifetime
             let rsession = new RemoteSessionBase(this.conn, ref.lsid, null, srcid);
             rsession.lcodec = this.lcodec;
-            let robj = rsession.unmarshalId(oid);
-            robj._rdata.closed = true; // callbacks do not need to be released
-            return robj;
+            return rsession.unmarshalId(oid);
         }
         
         let lsid = ref.rsid;
@@ -400,7 +398,6 @@ class LocalObjectBase {
         this._lsession = lsession;
         this._loid = loid;
         this._lref = {lsid: lsession.lsid, [OBJECT_ID]: loid};
-        this._nref = 1;
         
         // The following monstrosity allows us to pass callbacks to remote method calls in a
         // natural way, e.g.
@@ -418,11 +415,14 @@ class LocalObjectBase {
                                 return function(that, ...args) {
                                     // eslint-disable-next-line no-invalid-this
                                     let bf = prop2.call(this, that, ...args);
-                                    bf.toJSON = () => ({
-                                        lsid: that._lsession.lsid,
-                                        [OBJECT_ID]: that._loid,
-                                        method: key
-                                    });
+                                    bf.toJSON = () => {
+                                        ++that._nref;
+                                        return {
+                                            lsid: that._lsession.lsid,
+                                            [OBJECT_ID]: that._loid,
+                                            method: key
+                                        };
+                                    };
                                     return bf;
                                 };
                             }
@@ -436,6 +436,7 @@ class LocalObjectBase {
     }
     
     toJSON() {
+        ++this._nref;
         return this._lref;
     }
     
@@ -444,7 +445,7 @@ class LocalObjectBase {
     }
     
     release() {
-        if (!--this._nref) {
+        if (--this._nref <= 0) {
             this._release();
         }
     }
@@ -505,6 +506,7 @@ class LocalObjectBase {
     }
     
     _enter() {
+        ++this._nref;
         return this;
     }
     
@@ -525,6 +527,8 @@ class LocalRoot extends LocalObjectBase {
     
     constructor(lsession) {
         super(lsession, null);
+        // root objects are born with one implicit reference
+        this._nref = 1;
     }
 
     _close() {
@@ -569,6 +573,8 @@ class LocalObject extends LocalObjectBase {
         let loid = lsession.nextloid++;
         super(lsession, loid);
         lsession.objects[loid] = this;
+        // this object has no references until it is marshalled
+        this._nref = 0;
     }
 }
 
@@ -576,28 +582,30 @@ let closeRemoteObject = rdata => {
     // If the session or the connection or the bridged connection is already closed, then don't
     // throw an error, because the remote object is already dead.
     return new Promise((resolve, reject) => {
-        if (rdata.closed || rdata.rsession.closed) {
-            resolve(); // already closed
+        if (rdata.closed) {
+            resolve(); // object is already closed
         } else {
             rdata.closed = true;
             let did;
             try {
-                did = rdata.rsession.call(rdata.rref, 'release');
+                did = rdata.rsession.call(new Reference(rdata.rref), 'release');
             } catch (exc) {
                 if (exc instanceof Errors.DisconnectedError) {
                     resolve(); // direct connection is already dead
                 } else {
-                    reject(exc);
+                    reject(exc); // unexpected
                 }
             }
             if (did !== void 0) {
                 did.then(
                     resolve, // object successfully released
                     exc => {
-                        if (exc instanceof Errors.DisconnectedError) {
-                            resolve(); // connection (direct or bridged) is now dead
+                        if (exc instanceof Errors.DisconnectedError || // connection (direct or
+                                                                       // bridged) is now dead
+                                exc instanceof Errors.LookupError) { // session is already closed
+                            resolve();
                         } else {
-                            reject(exc);
+                            reject(exc); // unexpected
                         }
                     });
             }
@@ -618,7 +626,9 @@ class RemoteObject {
         this._rdata = rdata;
         
         if (weak !== void 0) {
-            // Automatically release the remote object upon garbage collection.
+            // Automatically release the remote object upon garbage collection.  If 'weak' is
+            // unavailable (e.g. in the browser), the user must explicitly close the object (or its
+            // enclosing session) to avoid remote leaks!
             weak(this, closeRemoteObject.bind(void 0, rdata));
         }
         
@@ -653,6 +663,11 @@ class RemoteObject {
                     });
                     return bf;
                 };
+                
+                // allow explicit resource management
+                f.close = () => robj._close();
+                f._enter = () => f;
+                f._exit = () => f.close();
                 
                 // sugar methods
                 f.help = () => robj.help(f.bind(robj));
@@ -851,19 +866,11 @@ class RemoteSessionManaged extends RemoteSessionBase {
         // anyway, so we can safely swallow any exceptions here.
         Promise.resolve(this._open(rformat)).catch(() => {});
         
-        this.closed = false;
         this._root = this.unmarshalId(null);
     }
     
     root() {
         return this._root;
-    }
-    
-    close() {
-        if (!this.closed) {
-            this.closed = true;
-            this._close();
-        }
     }
 }
 
@@ -877,7 +884,7 @@ class RemoteSession extends RemoteSessionManaged {
         return this.call(null, 'open', [this.rsid, rformat]);
     }
     
-    _close() {
+    close() {
         return this._root._close();
     }
 }
@@ -887,13 +894,14 @@ class BridgedSession extends RemoteSessionManaged {
     constructor(bridge, spec) {
         super(bridge._rdata.rsession.conn, spec.rsid, spec.lformat, null, spec.dst);
         this.bridge = bridge;
+        this._root._closed = true; // the bridge automatically closes the session for us
     }
     
     _open() {
         // the bridge automatically opens the session for us
     }
     
-    _close() {
+    close() {
         return this.bridge._close();
     }
 }
