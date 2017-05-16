@@ -972,6 +972,7 @@ class Connection {
         this.lcalls = {}; // local calls
         this.rcalls = {}; // remote calls
         this.bcalls = {}; // bridged calls
+        this.nextlsid = -2; // next local session id
         this.nextrsid = 0; // next remote session id
         this.nextrcid = 0; // next remote call id
         this.header = null; // pending message header
@@ -1047,7 +1048,10 @@ class Connection {
         }
     }
     
-    createLocalSession(lsid = -2, rootFactory = null, lformat = null) {
+    createLocalSession(lsid = null, rootFactory = null, lformat = null) {
+        if (lsid === null) {
+            lsid = this.nextlsid--;
+        }
         return new LocalSession(this, lsid, rootFactory, lformat);
     }
     
