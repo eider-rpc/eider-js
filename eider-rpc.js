@@ -621,7 +621,7 @@ class RemoteObject {
         let rdata = {
             rsession: rsession,
             rref: {rsid: rsession.rsid, [OBJECT_ID]: roid},
-            closed: false
+            closed: (rsession.rsid === -1) // native objects aren't refcounted
         };
         this._rdata = rdata;
         
