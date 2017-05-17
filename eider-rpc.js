@@ -414,7 +414,7 @@ class LocalSession extends Session {
     }
 }
 
-class NativeLocalSession extends LocalSession {
+class NativeSession extends LocalSession {
     
     marshal(obj, method) {
         let loid = this.nextloid++;
@@ -1052,7 +1052,7 @@ class Connection {
         new LocalSession(this, null, (lsession => new LocalSessionManager(lsession)));
         
         // native (non-LocalObject) session
-        new NativeLocalSession(this, -1, (lsession => new LocalRoot(lsession)));
+        new NativeSession(this, -1, (lsession => new LocalRoot(lsession)));
         
         // register the connection
         if (options.registry) {
