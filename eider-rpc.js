@@ -47,6 +47,14 @@ if (WS !== void 0) {
     }
 }
 
+// Use `weak` package, or fallback to global weak object
+let weak;
+try {
+    weak = require('weak');
+} catch (exc) {
+    weak = globals.weak;
+}
+
 let using = function(mgr, body) {
     // This provides automatic releasing of objects that represent external resources, like the
     // "with" statement in Python.
@@ -136,7 +144,7 @@ let getAttr = function(obj, attr) {
         throw new Errors.AttributeError("Cannot access forbidden attribute '" + attr +
             "' of '" + obj.constructor.name + "' object");
     }
-    return a;
+    return a.bind(obj);
 };
 
 class Codec {
@@ -163,16 +171,38 @@ class Codec {
 
 Codec.registry = {};
 
-new Codec('json', JSON.stringify, JSON.parse);
+new Codec(
+    'json',
+    (conn, data) => {
+        let marshal = function(key, value) {
+            switch (typeof value) {
+            case 'boolean':
+            case 'number':
+            case 'string':
+                return value;
+            }
+            if (value === null || Array.isArray(value)) {
+                return value;
+            }
+            if (typeof value.toJSON === 'function') {
+                return value.toJSON();
+            }
+            if (Object.getPrototypeOf(value).constructor === Object) {
+                return value;
+            }
+            return conn.lsessions[-1].marshal(value, typeof value === 'function' ? 'call' : null);
+        };
+        return JSON.stringify(data, marshal);
+    },
+    JSON.parse
+);
 
 // Use `msgpack-lite` package, or fallback to global msgpack object
 let msgpack;
 try {
     msgpack = require('msgpack-lite');
 } catch (exc) {
-    if (globals.msgpack !== void 0) {
-        msgpack = globals.msgpack;
-    }
+    msgpack = globals.msgpack;
 }
 if (msgpack !== void 0) {
     // ExtBuffer class isn't exported as of msgpack-lite 0.1.26
@@ -180,52 +210,49 @@ if (msgpack !== void 0) {
     // subclasses.
     let ExtBuffer = msgpack.decode([0xd4, 0, 0]).constructor;
     
-    let marshalAll = function(obj) {
-        switch (typeof obj) {
-        case 'boolean':
-        case 'number':
-        case 'string':
-            return obj;
-        }
-        if (obj === null) {
-            return obj;
-        }
-        if (Array.isArray(obj)) {
-            return obj.map(marshalAll);
-        }
-        if (typeof obj.toJSON === 'function') {
-            return new ExtBuffer(msgpack.encode(obj.toJSON()), 0);
-        }
-        if (obj instanceof ArrayBuffer || {}.toString.call(obj) === '[object ArrayBuffer]') {
-            return obj;
-        }
-        if (ArrayBuffer.isView(obj)) {
-            return obj.buffer;
-        }
-        return Object.keys(obj).reduce((o, k) => {
-            o[k] = marshalAll(obj[k]);
-            return o;
-        }, {});
-    };
-    
     let codec = msgpack.createCodec({binarraybuffer: true});
     let options = {codec: codec};
     codec.addExtUnpacker(0, data => new Reference(msgpack.decode(data, options)));
     
     new Codec(
         'msgpack',
-        data => msgpack.encode(marshalAll(data), options),
+        (conn, data) => {
+            let marshalAll = function(obj) {
+                switch (typeof obj) {
+                case 'boolean':
+                case 'number':
+                case 'string':
+                    return obj;
+                }
+                if (obj === null) {
+                    return obj;
+                }
+                if (Array.isArray(obj)) {
+                    return obj.map(marshalAll);
+                }
+                if (typeof obj.toJSON === 'function') {
+                    return new ExtBuffer(msgpack.encode(obj.toJSON()), 0);
+                }
+                if (obj instanceof ArrayBuffer ||
+                        {}.toString.call(obj) === '[object ArrayBuffer]') {
+                    return obj;
+                }
+                if (ArrayBuffer.isView(obj)) {
+                    return obj.buffer;
+                }
+                if (Object.getPrototypeOf(obj).constructor === Object) {
+                    return Object.keys(obj).reduce((o, k) => {
+                        o[k] = marshalAll(obj[k]);
+                        return o;
+                    }, {});
+                }
+                return conn.lsessions[-1].marshal(obj, typeof obj === 'function' ? 'call' : null);
+            };
+            return msgpack.encode(marshalAll(data), options);
+        },
         data => msgpack.decode(data, options),
         false
     );
-}
-
-// Use `weak` package, if available
-let weak;
-try {
-    weak = require('weak');
-} catch (exc) {
-    // weak package is optional
 }
 
 class Reference {
@@ -303,21 +330,16 @@ class Session {
     unmarshal(ref, srcid) {
         let obj = this.unmarshalObj(ref, srcid);
         
-        if (!('method' in ref)) {
+        let method = ref.method;
+        if (!method) {
             return obj;
         }
-        let method = ref.method;
         if (isPrivate(method)) {
             throw new Errors.AttributeError("Cannot access private attribute '" + method +
                 "' of '" + obj.constructor.name + "' object");
         }
         
-        let f = getAttr(obj, method);
-        
-        // use a Proxy because f.bind(obj) doesn't preserve properties (e.g. f.help)
-        return new Proxy(f, {
-            apply: (target, that, args) => target.apply(obj, args)
-        });
+        return getAttr(obj, method);
     }
     
     _enter() {
@@ -392,6 +414,50 @@ class LocalSession extends Session {
     }
 }
 
+class NativeLocalSession extends LocalSession {
+    
+    marshal(obj, method) {
+        let loid = this.nextloid++;
+        
+        if (weak === void 0) {
+            // The 'weak' package is unavailable (e.g. in the browser); in this case the user must
+            // be careful to avoid memory leaks, because the native object will remain referenced
+            // for the life of the connection.
+            this.objects[loid] = obj;
+        } else {
+            // Automatically forget the native object upon garbage collection.
+            this.objects[loid] = weak(obj, () => { delete this.objects[loid]; });
+        }
+        
+        return {
+            [OBJECT_ID]: loid,
+            lsid: this.lsid,
+            method: method
+        };
+    }
+    
+    unmarshalId(loid) {
+        if (loid === null) {
+            return this.objects[null]; // root
+        }
+        
+        let obj;
+        if (weak === void 0) {
+            if ((obj = this.objects[loid]) === void 0) {
+                throw new Errors.LookupError('Unknown object: ' + loid);
+            }
+        } else {
+            let ref = this.objects[loid];
+            if (ref === void 0 || (obj = weak.get(ref)) === void 0) {
+                throw new Errors.LookupError('Unknown object: ' + loid +
+                    ' (may have been garbage collected)');
+            }
+        }
+        
+        return typeof obj === 'function' ? {call: {bind: () => obj}} : obj;
+    }
+}
+
 class LocalObjectBase {
     
     constructor(lsession, loid) {
@@ -403,7 +469,8 @@ class LocalObjectBase {
         // natural way, e.g.
         //    robj.f(lobj.g.bind(lobj))
         // It works by adding a toJSON() method to the bound function object that gets called when
-        // it is marshalled. All other semantics of Function.prototype.bind() remain untouched.
+        // it is marshalled.  It also forwards the 'help' property, if any, to the bound function
+        // object.  All other semantics of Function.prototype.bind() remain untouched.
         return new Proxy(this, {
             get: (target, key) => {
                 let prop = target[key];
@@ -423,6 +490,7 @@ class LocalObjectBase {
                                             method: key
                                         };
                                     };
+                                    bf.help = prop.help;
                                     return bf;
                                 };
                             }
@@ -647,31 +715,33 @@ class RemoteObject {
                     return;
                 }
                 
-                // anything else resolves to a remote method call
+                // anything else resolves to a remote method
                 let f = function(...args) {
                     // eslint-disable-next-line no-invalid-this
                     return rsession.call(this, key, args);
                 };
                 
-                // allow the method to be marshalled for use as a callback
+                // add special methods to the method when bound
                 f.bind = function(that, ...args) {
                     let bf = Function.prototype.bind.call(this, that, ...args);
+                    
+                    // allow the bound method to be marshalled for use as a callback
                     bf.toJSON = () => ({
                         rsid: that._rdata.rref.rsid,
                         [OBJECT_ID]: that._rdata.rref[OBJECT_ID],
                         method: key
                     });
+                    
+                    // allow explicit resource management
+                    bf.close = () => that._close();
+                    bf._enter = () => bf;
+                    bf._exit = () => bf.close();
+                    
+                    // sugar methods
+                    bf.help = () => that.help(bf);
+                    bf.signature = () => that.signature(bf);
                     return bf;
                 };
-                
-                // allow explicit resource management
-                f.close = () => robj._close();
-                f._enter = () => f;
-                f._exit = () => f.close();
-                
-                // sugar methods
-                f.help = () => robj.help(f.bind(robj));
-                f.signature = () => robj.signature(f.bind(robj));
                 return f;
             }
         });
@@ -981,6 +1051,9 @@ class Connection {
         // root session
         new LocalSession(this, null, (lsession => new LocalSessionManager(lsession)));
         
+        // native (non-LocalObject) session
+        new NativeLocalSession(this, -1, (lsession => new LocalRoot(lsession)));
+        
         // register the connection
         if (options.registry) {
             this.registry = options.registry;
@@ -1231,7 +1304,7 @@ class Connection {
         let lobj = lsession.unmarshalId(loid);
         let f = getAttr(lobj, method);
         let params = ('params' in msg) ? lsession.unmarshalAll(rcodec, msg.params, srcid) : [];
-        return f.apply(lobj, params);
+        return f(...params);
     }
     
     getresult(rcodec, rsession, msg) {
@@ -1353,7 +1426,7 @@ class Connection {
             header.this = robj;
             header.params = params;
         } else {
-            body = lcodec.encode({
+            body = lcodec.encode(this, {
                 this: robj,
                 params: params
             });
@@ -1374,7 +1447,7 @@ class Connection {
             header.result = result;
         } else {
             try {
-                body = lcodec.encode({result: result});
+                body = lcodec.encode(this, {result: result});
             } catch (exc) {
                 this.error(srcid, lcid, exc, lcodec);
                 return;
@@ -1396,7 +1469,7 @@ class Connection {
             header.error = error;
         } else {
             try {
-                body = lcodec.encode({error: error});
+                body = lcodec.encode(this, {error: error});
                 header.format = lcodec.name;
             } catch (exc) {
                 body = null;
@@ -1408,7 +1481,7 @@ class Connection {
     
     send(header, body = null) {
         if (this.ws !== null) {
-            this.ws.send(this.lencode(header));
+            this.ws.send(this.lencode(this, header));
             if (body !== null) {
                 this.ws.send(body);
             }

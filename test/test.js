@@ -122,6 +122,14 @@ describe('Eider', function() {
             return f(...args);
         }
         
+        storeCb(cb) {
+            this.cb = cb;
+        }
+        
+        callCb(...args) {
+            return this.cb(...args);
+        }
+        
         passthru(x) {
             return x;
         }
@@ -205,6 +213,21 @@ describe('Eider', function() {
         join(s, xs) {
             return Array.prototype.join.call(xs, s);
         }
+    }
+    
+    class NativeObject {
+        
+        constructor(x) {
+            this.x = x;
+        }
+        
+        add(x) {
+            this.x += x;
+        }
+    }
+    
+    function nativeFunction(s) {
+        return s + ' native';
     }
     
     let server;
@@ -403,7 +426,7 @@ describe('Eider', function() {
     
     it('get documentation for a remote method', function() {
         return rroot.new_Value(42)
-            .then(x => x.add.help())
+            .then(x => x.add.bind(x).help())
             .then(h => assert.equal(h, 'Add another value to the value.'));
     });
     
@@ -420,7 +443,7 @@ describe('Eider', function() {
     });
     
     it('get type signature for a remote method', function() {
-        return rroot.map.signature()
+        return rroot.map.bind(rroot).signature()
             .then(sig =>
                 assert.deepEqual(sig, {
                     'defaults': {},
@@ -486,6 +509,42 @@ describe('Eider', function() {
                     .then(v => assert.equal(v, 7))
             )
         );
+    });
+    
+    it('pass a native object to a remote call', function() {
+        let n = new NativeObject(42);
+        return rroot.passthru(n).then(m => {
+            assert(Object.is(n, m));
+            return rroot.passthru(nativeFunction).then(m =>
+                assert(Object.is(nativeFunction, m))
+            );
+        });
+    });
+    
+    it('call a native method remotely', function() {
+        let n = new NativeObject(42);
+        return rroot.call(n.add.bind(n), 3).then(() =>
+            assert.equal(45, n.x)
+        );
+    });
+    
+    it('call a native function remotely', function() {
+        return rroot.call(nativeFunction, 'gone').then(s =>
+            assert.equal(s, 'gone native')
+        );
+    });
+    
+    it('try to access a native object after it has been garbage collected', function() {
+        let n = new NativeObject(0);
+        return rroot.storeCb(n.add.bind(n)).then(() => {
+            n = null;
+            gc();
+            return rroot.callCb(0)
+                .then(
+                    () => assert(false),
+                    exc => assert(exc instanceof Eider.Errors.LookupError)
+                );
+        });
     });
     
     it('call a bridged method locally', function() {
