@@ -1361,6 +1361,7 @@ class Connection {
         if (this.ws !== null) {
             this.ws.close();
             this.ws = null;
+            this.registry.remove(this.id);
         }
     }
     
