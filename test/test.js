@@ -540,7 +540,7 @@ describe('Eider', function() {
             rroot.callCb(42).then(() =>
                 assert.deepStrictEqual([42], x)
             )
-        )
+        );
     });
     
     it('call a bridged method locally', function() {
