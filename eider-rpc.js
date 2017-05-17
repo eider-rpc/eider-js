@@ -394,12 +394,8 @@ class LocalSession extends Session {
             return rsession.unmarshalId(oid);
         }
         
-        let lsid = ref.rsid;
-        if (!this.conn.lsessions.hasOwnProperty(lsid)) {
-            throw new Errors.LookupError('Unknown session: ' + lsid);
-        }
-        
-        return this.unmarshalId(oid);
+        let lsession = this.conn.unmarshalLsession(ref.rsid);
+        return lsession.unmarshalId(oid);
     }
     
     unmarshalId(loid) {
@@ -412,22 +408,25 @@ class LocalSession extends Session {
     close() {
         this.root().release();
     }
+    
+    destroy() {
+        for (let loid in this.objects) {
+            this.objects[loid]._close();
+        }
+        delete this.conn.lsessions[this.lsid];
+    }
+    
+    free(loid) {
+        let lobj = this.unmarshalId(loid);
+        lobj.release();
+    }
 }
 
 class NativeSession extends LocalSession {
     
     marshal(obj, method) {
         let loid = this.nextloid++;
-        
-        if (weak === void 0) {
-            // The 'weak' package is unavailable (e.g. in the browser); in this case the user must
-            // be careful to avoid memory leaks, because the native object will remain referenced
-            // for the life of the connection.
-            this.objects[loid] = obj;
-        } else {
-            // Automatically forget the native object upon garbage collection.
-            this.objects[loid] = weak(obj, () => { delete this.objects[loid]; });
-        }
+        this.objects[loid] = obj;
         
         return {
             [OBJECT_ID]: loid,
@@ -437,24 +436,23 @@ class NativeSession extends LocalSession {
     }
     
     unmarshalId(loid) {
-        if (loid === null) {
-            return this.objects[null]; // root
-        }
-        
-        let obj;
-        if (weak === void 0) {
-            if ((obj = this.objects[loid]) === void 0) {
-                throw new Errors.LookupError('Unknown object: ' + loid);
-            }
-        } else {
-            let ref = this.objects[loid];
-            if (ref === void 0 || (obj = weak.get(ref)) === void 0) {
-                throw new Errors.LookupError('Unknown object: ' + loid +
-                    ' (may have been garbage collected)');
-            }
-        }
-        
+        let obj = super.unmarshalId(loid);
         return typeof obj === 'function' ? {call: {bind: () => obj}} : obj;
+    }
+    
+    destroy() {
+        delete this.conn.lsessions[this.lsid];
+    }
+    
+    free(loid) {
+        if (loid === null) {
+            return super.free(null); // root
+        }
+        
+        if (!this.objects.hasOwnProperty(loid)) {
+            throw new Errors.LookupError('Unknown object: ' + loid);
+        }
+        delete this.objects[loid];
     }
 }
 
@@ -600,13 +598,7 @@ class LocalRoot extends LocalObjectBase {
     }
 
     _close() {
-        // close all objects in session
-        for (let loid in this._lsession.objects) {
-            this._lsession.objects[loid]._close();
-        }
-        
-        // remove session
-        delete this._lsession.conn.lsessions[this._lsession.lsid];
+        this._lsession.destroy();
     }
     
     static setNewables(cls, newables) {
@@ -632,9 +624,16 @@ class LocalSessionManager extends LocalRoot {
     open(lsid, lformat = null) {
         this._lsession.conn.createLocalSession(lsid, null, lformat);
     }
+    
+    free(lsid, loid) {
+        let lsession = this._lsession.conn.unmarshalLsession(lsid);
+        lsession.free(loid);
+    }
 }
 
 LocalSessionManager.prototype.open.help = 'Open a new session.';
+LocalSessionManager.prototype.free.help = 'Release the specified object, which may be a native ' +
+    'object.';
 
 class LocalObject extends LocalObjectBase {
     constructor(lsession) {
@@ -656,7 +655,9 @@ let closeRemoteObject = rdata => {
             rdata.closed = true;
             let did;
             try {
-                did = rdata.rsession.call(new Reference(rdata.rref), 'release');
+                // calling free instead of release allows native objects to be unreferenced
+                did = rdata.rsession.call(null, 'free',
+                                          [rdata.rref.rsid, rdata.rref[OBJECT_ID]]);
             } catch (exc) {
                 if (exc instanceof Errors.DisconnectedError) {
                     resolve(); // direct connection is already dead
@@ -689,7 +690,7 @@ class RemoteObject {
         let rdata = {
             rsession: rsession,
             rref: {rsid: rsession.rsid, [OBJECT_ID]: roid},
-            closed: (rsession.rsid === -1) // native objects aren't refcounted
+            closed: false
         };
         this._rdata = rdata;
         
@@ -894,11 +895,7 @@ class RemoteSessionBase extends Session {
         
         if ('rsid' in ref) {
             // this is actually a LocalObject (a callback) being passed back to us
-            let lsid = ref.rsid;
-            if (!this.conn.lsessions.hasOwnProperty(lsid)) {
-                throw new Errors.LookupError('Unknown session: ' + lsid);
-            }
-            let lsession = this.conn.lsessions[lsid];
+            let lsession = this.conn.unmarshalLsession(ref.rsid);
             return lsession.unmarshalId(oid);
         }
         
@@ -1271,6 +1268,13 @@ class Connection {
         }
     }
     
+    unmarshalLsession(lsid) {
+        if (!this.lsessions.hasOwnProperty(lsid)) {
+            throw new Errors.LookupError('Unknown session: ' + lsid);
+        }
+        return this.lsessions[lsid];
+    }
+    
     applyBegin(rcodec, srcid, method, msg) {
         let lref = msg.this;
         let loid;
@@ -1294,10 +1298,7 @@ class Connection {
             }
         }
         
-        if (!this.lsessions.hasOwnProperty(lsid)) {
-            throw new Errors.LookupError('Unknown session: ' + lsid);
-        }
-        return [this.lsessions[lsid], loid];
+        return [this.unmarshalLsession(lsid), loid];
     }
     
     applyFinish(rcodec, srcid, method, lsession, loid, msg) {

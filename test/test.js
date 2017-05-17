@@ -534,17 +534,13 @@ describe('Eider', function() {
         );
     });
     
-    it('try to access a native object after it has been garbage collected', function() {
-        let n = new NativeObject(0);
-        return rroot.storeCb(n.add.bind(n)).then(() => {
-            n = null;
-            gc();
-            return rroot.callCb(0)
-                .then(
-                    () => assert(false),
-                    exc => assert(exc instanceof Eider.Errors.LookupError)
-                );
-        });
+    it('call an anonymous native function remotely', function() {
+        let x = [];
+        return rroot.storeCb(y => x.push(y)).then(() =>
+            rroot.callCb(42).then(() =>
+                assert.deepStrictEqual([42], x)
+            )
+        )
     });
     
     it('call a bridged method locally', function() {
