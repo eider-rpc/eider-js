@@ -19,7 +19,7 @@ limitations under the License.
 (function() {
 'use strict';
 
-const VERSION = '0.9.4';
+const VERSION = '0.10.0';
 
 // Get a reference to the global context object
 let globals = typeof self === 'object' && self.self === self && self || // browser

@@ -1,6 +1,6 @@
 {
   "name": "eider-rpc",
-  "version": "0.9.4",
+  "version": "0.10.0",
   "description": "An object-oriented, asynchronous, late-binding, web-first, polyglot RPC protocol",
   "homepage": "https://github.com/eider-rpc/eider-js",
   "main": "eider-rpc.js",
