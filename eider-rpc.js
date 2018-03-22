@@ -900,14 +900,20 @@ class RemoteSessionBase extends Session {
         }
         
         let rsid = ref.lsid;
-        if (rsid !== this.rsid) {
-            throw new Errors.LookupError('Unknown session: ' + rsid);
+        let rsession;
+        if (rsid === this.rsid) {
+            rsession = this;
+        } else {
+            // this is actually a reference to an object in another session (or a native object)
+            // don't use a real RemoteSession, because we don't manage its lifetime
+            rsession = this.createExternalSession(this.conn, rsid, null, this.dstid);
+            rsession.lcodec = this.lcodec;
         }
         
-        let robj = this.unmarshalId(oid);
+        let robj = rsession.unmarshalId(oid);
         
         if ('bridge' in ref) {
-            return this.unmarshalBridge(robj, ref.bridge);
+            return rsession.unmarshalBridge(robj, ref.bridge);
         }
         
         return robj;
@@ -919,6 +925,10 @@ class RemoteSessionBase extends Session {
     
     unmarshalId(roid) {
         return new RemoteObject(this, roid);
+    }
+    
+    createExternalSession(...args) {
+        return new RemoteSessionBase(...args);
     }
 }
 

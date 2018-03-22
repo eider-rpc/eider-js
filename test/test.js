@@ -133,6 +133,10 @@ describe('Eider', function() {
         passthru(x) {
             return x;
         }
+        
+        native(x) {
+            return new NativeObject(x);
+        }
     }
     
     Eider.LocalRoot.setNewables(API, [Value, Range, Sequence]);
@@ -223,6 +227,10 @@ describe('Eider', function() {
         
         add(x) {
             this.x += x;
+        }
+        
+        get() {
+            return this.x;
         }
     }
     
@@ -511,7 +519,7 @@ describe('Eider', function() {
         );
     });
     
-    it('pass a native object to a remote call', function() {
+    it('pass a local native object to a remote call', function() {
         let n = new NativeObject(42);
         return rroot.passthru(n).then(m => {
             assert(Object.is(n, m));
@@ -519,6 +527,13 @@ describe('Eider', function() {
                 assert(Object.is(nativeFunction, m))
             );
         });
+    });
+    
+    it('return a remote native object from a remote call', function() {
+        return rroot.native(99).then(rn =>
+            rn.add(1).then(() =>
+                rn.get().then(x =>
+                    assert.equal(100, x))));
     });
     
     it('call a native method remotely', function() {
