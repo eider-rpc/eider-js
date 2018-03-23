@@ -650,34 +650,28 @@ let closeRemoteObject = rdata => {
     // throw an error, because the remote object is already dead.
     return new Promise((resolve, reject) => {
         if (rdata.closed) {
-            resolve(); // object is already closed
+            // object is already closed
+            resolve();
+        } else if (rdata.rsession.closed() || rdata.rsession.conn.ws === null) {
+            // session is already closed, or direct connection is already dead
+            rdata.closed = true;
+            resolve();
         } else {
             rdata.closed = true;
-            let did;
-            try {
-                // calling free instead of release allows native objects to be unreferenced
-                did = rdata.rsession.call(null, 'free',
-                                          [rdata.rref.rsid, rdata.rref[OBJECT_ID]]);
-            } catch (exc) {
-                if (exc instanceof Errors.DisconnectedError) {
-                    resolve(); // direct connection is already dead
-                } else {
-                    reject(exc); // unexpected
-                }
-            }
-            if (did !== void 0) {
-                did.then(
-                    resolve, // object successfully released
-                    exc => {
-                        if (exc instanceof Errors.DisconnectedError || // connection (direct or
-                                                                       // bridged) is now dead
-                                exc instanceof Errors.LookupError) { // session is already closed
-                            resolve();
-                        } else {
-                            reject(exc); // unexpected
-                        }
-                    });
-            }
+            // calling free instead of release allows native objects to be unreferenced
+            rdata.rsession.call(null, 'free', [rdata.rref.rsid, rdata.rref[OBJECT_ID]]).then(
+                // object successfully released
+                resolve,
+                exc => {
+                    if (exc instanceof Errors.LookupError ||
+                        exc instanceof Errors.DisconnectedError) {
+                        // session is now closed, or connection (direct or bridged) is now dead
+                        resolve();
+                    } else {
+                        // unexpected
+                        reject(exc);
+                    }
+                });
         }
     });
 };
@@ -927,6 +921,10 @@ class RemoteSessionBase extends Session {
         return new RemoteObject(this, roid);
     }
     
+    closed() {
+        return false;
+    }
+    
     createExternalSession(...args) {
         return new RemoteSessionBase(...args);
     }
@@ -948,6 +946,10 @@ class RemoteSessionManaged extends RemoteSessionBase {
     
     root() {
         return this._root;
+    }
+    
+    closed() {
+        return this._root._rdata._closed;
     }
 }
 
@@ -980,6 +982,10 @@ class BridgedSession extends RemoteSessionManaged {
     
     close() {
         return this.bridge._close();
+    }
+    
+    closed() {
+        return this.bridge._rdata._closed;
     }
 }
 
