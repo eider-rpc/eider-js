@@ -134,6 +134,18 @@ let Errors = {}; [
 });
 Errors.Exception = Error;
 
+// Modeled after Python's logging module.
+const LOG_ERROR = 40;
+const LOG_WARNING = 30;
+const LOG_INFO = 20;
+const LOG_DEBUG = 10;
+const LogLevel = {
+    [LOG_ERROR]: 'error',
+    [LOG_WARNING]: 'warning',
+    [LOG_INFO]: 'info',
+    [LOG_DEBUG]: 'debug'
+};
+
 let isPrivate = function(name) {
     // Properties with names beginning with an underscore, or with certain
     // special names defined or used by JavaScript, cannot be accessed remotely.
@@ -1094,10 +1106,13 @@ class Connection {
 
         this.onopen = options.onopen || (() => {});
         this.onclose = options.onclose || (() => {});
-        this.log = (options.log ||
-            ((...args) => {
-                console.log(...args); // eslint-disable-line no-console
+        this.logfn = (options.log ||
+            ((level, ...args) => {
+                // eslint-disable-next-line no-console
+                console.log(LogLevel[level] || 'Unknown', ...args);
             }));
+        this.logLevel = options.logLevel === void 0 ?
+            LOG_WARNING : options.logLevel;
         this.lencode = Codec.registry[options.lformat || 'json'].encode;
         this.rcodec = Codec.registry[options.rformat || 'json'];
         this.rcodecBin = Codec.registry[options.rformatBin || 'msgpack'];
@@ -1161,6 +1176,7 @@ class Connection {
             };
 
             ws.onmessage = event => {
+                this.log(LOG_DEBUG, 'recv', event.data);
                 if (this.header === null) {
                     let rcodec = (typeof event.data === 'string') ?
                         this.rcodec : this.rcodecBin;
@@ -1168,9 +1184,8 @@ class Connection {
                     try {
                         msg = rcodec.decode(event.data);
                     } catch (exc) {
-                        this.log(
-                            'Invalid data received on Eider WebSocket ' +
-                            'connection:', exc);
+                        this.log(LOG_ERROR, 'Invalid data received on Eider ' +
+                            'WebSocket connection:', exc);
                         this.close();
                         return;
                     }
@@ -1425,7 +1440,7 @@ class Connection {
 
     onError(srcid, lcid, exc, lcodec = null) {
         if (lcid === null) {
-            this.log(exc);
+            this.log(LOG_ERROR, exc);
         } else {
             if (exc.name === void 0 || exc.message === void 0) {
                 exc = new Error(exc);
@@ -1562,10 +1577,21 @@ class Connection {
 
     send(header, body = null) {
         if (this.ws !== null) {
-            this.ws.send(this.lencode(this, header));
+            this.sendData(this.lencode(this, header));
             if (body !== null) {
-                this.ws.send(body);
+                this.sendData(body);
             }
+        }
+    }
+
+    sendData(data) {
+        this.log(LOG_DEBUG, 'send', data);
+        this.ws.send(data);
+    }
+
+    log(level, ...args) {
+        if (level >= this.logLevel) {
+            this.logfn(level, ...args);
         }
     }
 
@@ -1609,6 +1635,10 @@ let Eider = {
     forEachAsync,
     LocalObject,
     LocalRoot,
+    LOG_ERROR,
+    LOG_WARNING,
+    LOG_INFO,
+    LOG_DEBUG,
     Reference,
     Registry,
     serve,
