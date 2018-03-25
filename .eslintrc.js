@@ -1,4 +1,6 @@
-{
+const os = require('os');
+
+module.exports = {
     "env": {
         "browser": true,
         "es6": true,
@@ -30,15 +32,8 @@
             }
         ],
         "linebreak-style": [
-            "off"
-        ],
-        "max-len": [
             "error",
-            99
-        ],
-        "no-trailing-spaces": [
-            "error",
-            { "skipBlankLines": true }
+            (os.platform() === 'win32' ? "windows" : "unix")
         ],
         "quotes": [
             "error",
@@ -47,10 +42,6 @@
         ],
         "require-jsdoc": [
             "off"
-        ],
-        "semi": [
-            "error",
-            "always"
         ]
     }
-}
+};
