@@ -221,7 +221,7 @@ if (msgpack !== void 0) {
     let ExtBuffer = msgpack.decode([0xd4, 0, 0]).constructor;
 
     let codec = msgpack.createCodec({binarraybuffer: true});
-    let options = {codec: codec};
+    let options = {codec};
     codec.addExtUnpacker(
         0, data => new Reference(msgpack.decode(data, options)));
 
@@ -447,7 +447,7 @@ class NativeSession extends LocalSession {
         return {
             [OBJECT_ID]: loid,
             lsid: this.lsid,
-            method: method
+            method
         };
     }
 
@@ -576,7 +576,7 @@ class LocalObjectBase {
         }
         params.push(['*args', null]);
         return {
-            'params': params,
+            params,
             'defaults': {},
             'return': null
         };
@@ -714,7 +714,7 @@ class RemoteObject {
         // Add an extra level of indirection so that this's state can still be
         // referenced after this itself is garbage-collected.
         let rdata = {
-            rsession: rsession,
+            rsession,
             rref: {rsid: rsession.rsid, [OBJECT_ID]: roid},
             closed: false
         };
@@ -905,7 +905,7 @@ class RemoteSessionBase extends Session {
 
         let rcall = new Promise((resolve, reject) => {
             this.conn.rcalls[rcid] = {
-                rsession: this, resolve: resolve, reject: reject
+                rsession: this, resolve, reject
             };
         });
 
@@ -1045,7 +1045,7 @@ class Bridge extends LocalObject {
         super(lsession);
         this._rsession = new RemoteSession(rconn, null, rformat);
         this._lref.bridge = {
-            dst: rconn.id, rsid: this._rsession.rsid, lformat: lformat
+            dst: rconn.id, rsid: this._rsession.rsid, lformat
         };
     }
 
@@ -1498,7 +1498,7 @@ class Connection {
         let header = {
             dst: dstid,
             id: rcid,
-            method: method
+            method
         };
 
         let body;
@@ -1509,7 +1509,7 @@ class Connection {
         } else {
             body = lcodec.encode(this, {
                 this: robj,
-                params: params
+                params
             });
             header.format = lcodec.name;
         }
@@ -1528,7 +1528,7 @@ class Connection {
             header.result = result;
         } else {
             try {
-                body = lcodec.encode(this, {result: result});
+                body = lcodec.encode(this, {result});
             } catch (exc) {
                 this.error(srcid, lcid, exc, lcodec);
                 return;
@@ -1550,7 +1550,7 @@ class Connection {
             header.error = error;
         } else {
             try {
-                body = lcodec.encode(this, {error: error});
+                body = lcodec.encode(this, {error});
                 header.format = lcodec.name;
             } catch (exc) {
                 body = null;
@@ -1594,26 +1594,26 @@ let connect = function(whither, options = {}) {
 };
 
 let serve = function(port, options = {}) {
-    let server = new WSServer({port: port});
+    let server = new WSServer({port});
     server.on('connection', ws => connect(ws, options));
     return server;
 };
 
 let Eider = {
-    asyncIterator: asyncIterator,
-    Bridge: Bridge,
-    Codec: Codec,
-    connect: connect,
-    Connection: Connection,
-    Errors: Errors,
-    forEachAsync: forEachAsync,
-    LocalObject: LocalObject,
-    LocalRoot: LocalRoot,
-    Reference: Reference,
-    Registry: Registry,
-    serve: serve,
-    using: using,
-    VERSION: VERSION
+    asyncIterator,
+    Bridge,
+    Codec,
+    connect,
+    Connection,
+    Errors,
+    forEachAsync,
+    LocalObject,
+    LocalRoot,
+    Reference,
+    Registry,
+    serve,
+    using,
+    VERSION
 };
 
 if (typeof module !== 'undefined' && !module.nodeType && module.exports) {
