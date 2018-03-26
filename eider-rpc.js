@@ -692,7 +692,7 @@ let closeRemoteObject = rdata => {
         if (rdata.closed) {
             // object is already closed
             resolve();
-        } else if (rdata.rsession.closed() || rdata.rsession.conn.ws === null) {
+        } else if (rdata.rsession.closed() || rdata.rsession.conn.closed()) {
             // session is already closed, or direct connection is already dead
             rdata.closed = true;
             resolve();
@@ -1204,6 +1204,10 @@ class Connection {
         }
     }
 
+    closed() {
+        return this.ws === null || this.ws.readyState !== 1;
+    }
+
     createLocalSession(lsid = null, rootFactory = null, lformat = null) {
         if (lsid === null) {
             lsid = this.nextlsid--;
@@ -1496,7 +1500,7 @@ class Connection {
             let cids = conn.bcalls[this.id];
             if (cids !== void 0) {
                 delete conn.bcalls[this.id];
-                if (conn.ws !== null) {
+                if (!conn.closed()) {
                     for (let cid in cids) {
                         conn.send({cancel: cid});
                     }
@@ -1506,7 +1510,7 @@ class Connection {
     }
 
     sendcall(lcodec, dstid, rcid, robj, method, params = []) {
-        if (this.ws === null) {
+        if (this.closed()) {
             throw new Errors.DisconnectedError('Connection closed');
         }
 
@@ -1576,7 +1580,7 @@ class Connection {
     }
 
     send(header, body = null) {
-        if (this.ws !== null) {
+        if (!this.closed()) {
             this.sendData(this.lencode(this, header));
             if (body !== null) {
                 this.sendData(body);
