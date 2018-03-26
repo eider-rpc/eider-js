@@ -1506,13 +1506,16 @@ class Connection {
         let body;
         if (lcodec === null) {
             body = null;
-            header.this = robj;
+            if (robj !== null) {
+                header.this = robj;
+            }
             header.params = params;
         } else {
-            body = lcodec.encode(this, {
-                this: robj,
-                params
-            });
+            body = {params};
+            if (robj !== null) {
+                body.this = robj;
+            }
+            body = lcodec.encode(this, body);
             header.format = lcodec.name;
         }
 
