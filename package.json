@@ -7,7 +7,7 @@
   "scripts": {
     "test": "mocha --expose-gc",
     "lint": "eslint eider-rpc.js test/test.js",
-    "minify": "babili eider-rpc.js -o eider-rpc.min.js --no-comments"
+    "minify": "minify eider-rpc.js -o eider-rpc.min.js"
   },
   "keywords": [
     "RPC"
@@ -21,15 +21,12 @@
   "optionalDependencies": {
     "msgpack-lite": "^0.1.26",
     "weak": "^1.0.1",
-    "ws": "^1.1.1"
+    "ws": "^5.1.0"
   },
   "devDependencies": {
-    "babili": "0.0.9",
-    "eslint": "^3.10.0",
-    "eslint-config-google": "^0.7.0",
-    "mocha": "^3.1.2",
-    "msgpack-lite": "^0.1.26",
-    "weak": "^1.0.1",
-    "ws": "^1.1.1"
+    "babel-minify": "^0.3.0",
+    "eslint": "^4.19.1",
+    "eslint-config-google": "^0.9.1",
+    "mocha": "^5.0.5"
   }
 }

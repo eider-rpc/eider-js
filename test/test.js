@@ -31,7 +31,6 @@ describe('Eider', function() {
     }
 
     class Value extends Eider.LocalObject {
-
         constructor(lsession, x) {
             super(lsession);
             this._x = x;
@@ -42,19 +41,27 @@ describe('Eider', function() {
         }
 
         set_val(x) { // eslint-disable-line camelcase
-            return getValue(x).then(x => { this._x = x; });
+            return getValue(x).then(x => {
+                this._x = x;
+            });
         }
 
         add(x) {
-            return getValue(x).then(x => { this._x += x; });
+            return getValue(x).then(x => {
+                this._x += x;
+            });
         }
 
         subtract(x) {
-            return getValue(x).then(x => { this._x -= x; });
+            return getValue(x).then(x => {
+                this._x -= x;
+            });
         }
 
         multiply(x) {
-            return getValue(x).then(x => { this._x *= x; });
+            return getValue(x).then(x => {
+                this._x *= x;
+            });
         }
 
         divide(x) {
@@ -79,7 +86,6 @@ describe('Eider', function() {
     }
 
     class Range extends Eider.LocalObject {
-
         constructor(lsession, start, stop) {
             super(lsession);
             this._start = start;
@@ -101,7 +107,6 @@ describe('Eider', function() {
     }
 
     class Sequence extends Eider.LocalObject {
-
         constructor(lsession, seq) {
             super(lsession);
             this._seq = seq;
@@ -116,7 +121,6 @@ describe('Eider', function() {
     }
 
     class API extends Eider.LocalRoot {
-
         numObjects() {
             return Object.keys(this._lsession.objects).length;
         }
@@ -145,7 +149,6 @@ describe('Eider', function() {
     Eider.LocalRoot.setNewables(API, [Value, Range, Sequence]);
 
     class LocalAPI extends API {
-
         product(...args) {
             return args.reduce((a, b) => a * b);
         }
@@ -156,7 +159,6 @@ describe('Eider', function() {
     }
 
     class RemoteAPI extends API {
-
         constructor(...args) {
             super(...args);
             this._cancelled = false;
@@ -168,7 +170,9 @@ describe('Eider', function() {
 
         cancellable() {
             let resolve;
-            let p = new Promise(r => { resolve = r; });
+            let p = new Promise(r => {
+                resolve = r;
+            });
             p.cancel = () => {
                 this._cancelled = true;
                 resolve();
@@ -223,7 +227,6 @@ describe('Eider', function() {
     }
 
     class NativeObject {
-
         constructor(x) {
             this.x = x;
         }
@@ -405,15 +408,15 @@ describe('Eider', function() {
         function() {
             let rval;
             return Eider.using(conn.createSession(), rroot =>
-                    rroot.new_Value(0).then(rv => {
-                        rval = rv;
-                    })
-                ).then(() =>
-                    rval.val()
-                ).then(
-                    () => assert(false),
-                    exc => assert(exc instanceof Eider.Errors.LookupError)
-                );
+                rroot.new_Value(0).then(rv => {
+                    rval = rv;
+                })
+            ).then(() =>
+                rval.val()
+            ).then(
+                () => assert(false),
+                exc => assert(exc instanceof Eider.Errors.LookupError)
+            );
         }
     );
 
@@ -447,9 +450,9 @@ describe('Eider', function() {
     it("list remote object's methods", function() {
         return rroot.new_Value(42)
             .then(x => x.dir())
-            .then(d => assert.deepEqual(d, ('add addref dir divide help ' +
-                'multiply release set_val signature subtract taxa val')
-                    .split(/\s+/)));
+            .then(d => assert.deepEqual(d, (
+                'add addref dir divide help multiply release set_val ' +
+                'signature subtract taxa val').split(/\s+/)));
     });
 
     it("list remote object's base classes", function() {
@@ -482,6 +485,7 @@ describe('Eider', function() {
 
     it('call an exception-raising local method remotely, without remote ' +
         'post-processing',
+        /* eslint-disable indent */
         function() {
             let v = lroot.new_Value(42);
             return rroot.call(v.divide.bind(v), 0)
@@ -491,10 +495,12 @@ describe('Eider', function() {
                         exc.message === 'Cannot divide by zero')
                 );
         }
+        /* eslint-enable indent */
     );
 
     it('call an exception-raising local method remotely, with remote ' +
         'post-processing',
+        /* eslint-disable indent */
         function() {
             let v = lroot.new_Value(42);
             return rroot.map(v.divide.bind(v), [3, 1, 0, 7])
@@ -504,6 +510,7 @@ describe('Eider', function() {
                         exc.message === 'Cannot divide by zero')
                 );
         }
+        /* eslint-enable indent */
     );
 
     it('call a remote method remotely', function() {
@@ -579,6 +586,7 @@ describe('Eider', function() {
     });
 
     it('try to access a bridged object after its bridge has been closed',
+        /* eslint-disable indent */
         function() {
             let bval;
             return Eider.using(rroot.bridge(), broot =>
@@ -592,6 +600,7 @@ describe('Eider', function() {
                     exc => assert(exc instanceof Eider.Errors.LookupError)
                 );
         }
+        /* eslint-enable indent */
     );
 
     it('call a bridged method that raises an exception', function() {

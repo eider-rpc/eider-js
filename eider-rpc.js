@@ -98,7 +98,7 @@ let using = function(mgr, body) {
 };
 
 let asyncIterator = Symbol.asyncIterator;
-if (asyncIterator === void 0) {  // expected circa ES8
+if (asyncIterator === void 0) { // expected circa ES8
     asyncIterator = Symbol('Symbol.asyncIterator');
 }
 
@@ -169,7 +169,6 @@ let getAttr = function(obj, attr) {
 };
 
 class Codec {
-
     constructor(name, encode, decode, inband = true) {
         this.name = name;
         this.encode = encode;
@@ -280,7 +279,6 @@ if (msgpack !== void 0) {
 }
 
 class Reference {
-
     constructor(ref) {
         this.ref = ref;
     }
@@ -291,7 +289,6 @@ class Reference {
 }
 
 class Session {
-
     constructor(conn, lformat = null) {
         this.conn = conn;
         this.lcodec = Codec.byname(lformat);
@@ -378,7 +375,6 @@ class Session {
 }
 
 class LocalSession extends Session {
-
     constructor(conn, lsid, rootFactory = null, lformat = null) {
         if (lsid in conn.lsessions) {
             throw new Errors.RuntimeError('Session ID in use: ' + lsid);
@@ -451,7 +447,6 @@ class LocalSession extends Session {
 }
 
 class NativeSession extends LocalSession {
-
     marshal(obj, method) {
         let loid = this.nextloid++;
         this.objects[loid] = obj;
@@ -485,7 +480,6 @@ class NativeSession extends LocalSession {
 }
 
 class LocalObjectBase {
-
     constructor(lsession, loid) {
         this._lsession = lsession;
         this._loid = loid;
@@ -627,7 +621,6 @@ LocalObjectBase.prototype.signature.help =
     'Get method type signature.';
 
 class LocalRoot extends LocalObjectBase {
-
     constructor(lsession) {
         super(lsession, null);
         // root objects are born with one implicit reference
@@ -651,14 +644,12 @@ class LocalRoot extends LocalObjectBase {
 
             (cls.prototype['new_' + C.name] = function(...args) {
                 return _new(this._lsession, ...args);
-            })
-            .help = _new.help;
+            }).help = _new.help;
         });
     }
 }
 
 class LocalSessionManager extends LocalRoot {
-
     open(lsid, lformat = null) {
         this._lsession.conn.createLocalSession(lsid, null, lformat);
     }
@@ -701,27 +692,26 @@ let closeRemoteObject = rdata => {
             // calling free instead of release allows native objects to be
             // unreferenced
             rdata.rsession.call(
-                    null, 'free', [rdata.rref.rsid, rdata.rref[OBJECT_ID]])
-                .then(
-                    // object successfully released
-                    resolve,
-                    exc => {
-                        if (exc instanceof Errors.LookupError ||
-                                exc instanceof Errors.DisconnectedError) {
-                            // session is now closed, or connection (direct or
-                            // bridged) is now dead
-                            resolve();
-                        } else {
-                            // unexpected
-                            reject(exc);
-                        }
-                    });
+                null, 'free', [rdata.rref.rsid, rdata.rref[OBJECT_ID]]
+            ).then(
+                // object successfully released
+                resolve,
+                exc => {
+                    if (exc instanceof Errors.LookupError ||
+                            exc instanceof Errors.DisconnectedError) {
+                        // session is now closed, or connection (direct or
+                        // bridged) is now dead
+                        resolve();
+                    } else {
+                        // unexpected
+                        reject(exc);
+                    }
+                });
         }
     });
 };
 
 class RemoteObject {
-
     constructor(rsession, roid) {
         // Add an extra level of indirection so that this's state can still be
         // referenced after this itself is garbage-collected.
@@ -816,7 +806,6 @@ class RemoteObject {
 }
 
 class RemoteIterator {
-
     constructor(robj) {
         this.robj = robj;
         this.iter = -1;
@@ -904,7 +893,6 @@ class RemoteIterator {
 }
 
 class RemoteSessionBase extends Session {
-
     constructor(conn, rsid, lformat = null, dstid = null) {
         super(conn, lformat);
         this.rsid = rsid;
@@ -984,7 +972,6 @@ class RemoteSessionBase extends Session {
 }
 
 class RemoteSessionManaged extends RemoteSessionBase {
-
     constructor(conn, rsid, lformat = null, rformat = null, dstid = null) {
         super(conn, rsid, lformat, dstid);
 
@@ -1008,7 +995,6 @@ class RemoteSessionManaged extends RemoteSessionBase {
 }
 
 class RemoteSession extends RemoteSessionManaged {
-
     constructor(conn, lformat = null, rformat = null) {
         super(conn, conn.nextrsid++, lformat, rformat);
     }
@@ -1023,7 +1009,6 @@ class RemoteSession extends RemoteSessionManaged {
 }
 
 class BridgedSession extends RemoteSessionManaged {
-
     constructor(bridge, spec) {
         super(
             bridge._rdata.rsession.conn, spec.rsid, spec.lformat, null,
@@ -1048,12 +1033,9 @@ class BridgedSession extends RemoteSessionManaged {
 }
 
 class Bridge extends LocalObject {
-
-    constructor(lsession, rconn,
-                // Default formats to json rather than null because bridging
-                // peer probably doesn't need to decode and re-encode message
-                // bodies.
-                lformat = 'json', rformat = 'json') {
+    // Default formats to json rather than null because bridging peer probably
+    // doesn't need to decode and re-encode message bodies.
+    constructor(lsession, rconn, lformat = 'json', rformat = 'json') {
         super(lsession);
         this._rsession = new RemoteSession(rconn, null, rformat);
         this._lref.bridge = {
@@ -1071,7 +1053,6 @@ Bridge.help =
     'another client.';
 
 class Registry {
-
     constructor() {
         this.objects = {};
         this.nextid = 0;
@@ -1095,7 +1076,6 @@ class Registry {
 let globalRegistry = new Registry();
 
 class Connection {
-
     constructor(whither, options = {}) {
         if (options.rootFactory) {
             this.rootFactory = options.rootFactory;
