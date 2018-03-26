@@ -915,7 +915,11 @@ class RemoteSessionBase extends Session {
             let rcall = this.conn.rcalls[rcid];
             if (rcall !== void 0) {
                 delete this.conn.rcalls[rcid];
-                this.conn.send({dst: this.dstid, cancel: rcid});
+                let msg = {cancel: rcid};
+                if (this.dstid !== null) {
+                    msg.dst = this.dstid;
+                }
+                this.conn.send(msg);
                 rcall.reject(new Errors.CancelledError());
             }
         };
@@ -1494,11 +1498,10 @@ class Connection {
             throw new Errors.DisconnectedError('Connection closed');
         }
 
-        let header = {
-            dst: dstid,
-            id: rcid,
-            method
-        };
+        let header = {id: rcid, method};
+        if (dstid !== null) {
+            header.dst = dstid;
+        }
 
         let body;
         if (lcodec === null) {
@@ -1520,7 +1523,10 @@ class Connection {
         if (result === void 0) {
             result = null;
         }
-        let header = {dst: srcid, id: lcid};
+        let header = {id: lcid};
+        if (srcid !== null) {
+            header.dst = srcid;
+        }
         let body;
         if (lcodec === null) {
             body = null;
@@ -1538,7 +1544,10 @@ class Connection {
     }
 
     error(srcid, lcid, exc, lcodec = null) {
-        let header = {dst: srcid, id: lcid};
+        let header = {id: lcid};
+        if (srcid !== null) {
+            header.dst = srcid;
+        }
         let error = {name: exc.name, message: exc.message};
         if (typeof exc.stack === 'string') {
             error.stack = exc.stack;
