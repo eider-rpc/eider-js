@@ -1509,11 +1509,16 @@ class Connection {
             if (robj !== null) {
                 header.this = robj;
             }
-            header.params = params;
+            if (params.length) {
+                header.params = params;
+            }
         } else {
-            body = {params};
+            body = {};
             if (robj !== null) {
                 body.this = robj;
+            }
+            if (params.length) {
+                body.params = params;
             }
             body = lcodec.encode(this, body);
             header.format = lcodec.name;
