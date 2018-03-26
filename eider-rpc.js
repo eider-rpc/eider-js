@@ -447,15 +447,15 @@ class LocalSession extends Session {
 }
 
 class NativeSession extends LocalSession {
-    marshal(obj, method) {
+    marshal(obj, method = null) {
         let loid = this.nextloid++;
         this.objects[loid] = obj;
 
-        return {
-            [OBJECT_ID]: loid,
-            lsid: this.lsid,
-            method
-        };
+        let lref = {[OBJECT_ID]: loid, lsid: this.lsid};
+        if (method !== null) {
+            lref.method = method;
+        }
+        return lref;
     }
 
     unmarshalId(loid) {
