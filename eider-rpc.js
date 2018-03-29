@@ -20,7 +20,7 @@ limitations under the License.
 (function() {
 'use strict';
 
-const VERSION = '0.10.0';
+const VERSION = '0.11.0';
 
 // Get a reference to the global context object
 let globals =
