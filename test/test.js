@@ -258,6 +258,21 @@ describe('Eider', function() {
     let KEYWORDS = `__*__ bridge cancel dst error format id lformat lsid message
         method name params result rsid src stack this`.split(/\s+/);
 
+    let GARBAGE_IN = {
+        'x': 'y',
+        'z': [2, undefined, null, true,
+            {'undef': undefined, 'foo bar': 'baz'}],
+        'false': false,
+        'π': 3.14159
+    };
+    let GARBAGE_OUT = {
+        'x': 'y',
+        // undefined is converted to null in arrays, and omitted in objects
+        'z': [2, null, null, true, {'foo bar': 'baz'}],
+        'false': false,
+        'π': 3.14159
+    };
+
     before(function() {
         // All tests should still pass if Object.prototype has been extended.
         KEYWORDS.forEach(name => {
@@ -319,6 +334,11 @@ describe('Eider', function() {
     it('call a remote method', function() {
         return rroot.sum(3, 5, 9)
             .then(x => assert.equal(x, 17));
+    });
+
+    it('pass arbitrary data through a remote method', function() {
+        return rroot.passthru(GARBAGE_IN)
+            .then(x => assert.deepEqual(x, GARBAGE_OUT));
     });
 
     it('cancel a remote method call', function() {
@@ -669,5 +689,10 @@ describe('Eider', function() {
         let obj = {'__*__': 42, 'rsid': 99};
         return rrootMsgpack.passthru(obj)
             .then(x => assert.deepEqual(x, obj));
+    });
+
+    it('pass arbitrary data with msgpack', function() {
+        return rrootMsgpack.passthru(GARBAGE_IN)
+            .then(x => assert.deepEqual(x, GARBAGE_OUT));
     });
 });

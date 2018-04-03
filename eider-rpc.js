@@ -200,7 +200,7 @@ new Codec(
             case 'string':
                 return value;
             }
-            if (value === null || Array.isArray(value)) {
+            if (value === void 0 || value === null || Array.isArray(value)) {
                 return value;
             }
             if (typeof value.toJSON === 'function') {
@@ -245,7 +245,7 @@ if (msgpack !== void 0) {
                 case 'string':
                     return obj;
                 }
-                if (obj === null) {
+                if (obj === void 0 || obj === null) {
                     return obj;
                 }
                 if (Array.isArray(obj)) {
@@ -263,7 +263,10 @@ if (msgpack !== void 0) {
                 }
                 if (Object.getPrototypeOf(obj).constructor === Object) {
                     return Object.keys(obj).reduce((o, k) => {
-                        o[k] = marshalAll(obj[k]);
+                        let m = marshalAll(obj[k]);
+                        if (m !== void 0) {
+                            o[k] = m;
+                        }
                         return o;
                     }, {});
                 }
