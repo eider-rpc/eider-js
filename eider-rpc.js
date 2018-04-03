@@ -181,11 +181,10 @@ class Codec {
         if (name === null) {
             return null;
         }
-        let codec = Codec.registry[name];
-        if (codec === void 0) {
-            throw new Errors.LookupError('Unknown format: ' + name);
+        if (Codec.registry.hasOwnProperty(name)) {
+            return Codec.registry[name];
         }
-        return codec;
+        throw new Errors.LookupError('Unknown format: ' + name);
     }
 }
 
@@ -314,7 +313,7 @@ class Session {
         if (Array.isArray(obj)) {
             return obj.map(o => this.unmarshalAllInBand(o, srcid));
         }
-        if (OBJECT_ID in obj) {
+        if (obj.hasOwnProperty(OBJECT_ID)) {
             return this.unmarshal(obj, srcid);
         }
         return Object.keys(obj).reduce((o, k) => {
@@ -352,16 +351,16 @@ class Session {
     unmarshal(ref, srcid) {
         let obj = this.unmarshalObj(ref, srcid);
 
-        let method = ref.method;
-        if (!method) {
+        if (!ref.hasOwnProperty('method')) {
             return obj;
         }
+
+        let method = ref.method;
         if (isPrivate(method)) {
             throw new Errors.AttributeError(
                 "Cannot access private attribute '" + method + "' of '" +
                 obj.constructor.name + "' object");
         }
-
         return getAttr(obj, method);
     }
 
@@ -376,7 +375,7 @@ class Session {
 
 class LocalSession extends Session {
     constructor(conn, lsid, rootFactory = null, lformat = null) {
-        if (lsid in conn.lsessions) {
+        if (conn.lsessions.hasOwnProperty(lsid)) {
             throw new Errors.RuntimeError('Session ID in use: ' + lsid);
         }
 
@@ -409,7 +408,7 @@ class LocalSession extends Session {
     unmarshalObj(ref, srcid) {
         let oid = ref[OBJECT_ID];
 
-        if ('lsid' in ref) {
+        if (ref.hasOwnProperty('lsid')) {
             // This is actually a remote object (a callback).  Don't use a real
             // RemoteSession, because we don't manage its lifetime.
             let rsession = new RemoteSessionBase(
@@ -434,9 +433,9 @@ class LocalSession extends Session {
     }
 
     destroy() {
-        for (let loid in this.objects) {
+        Object.keys(this.objects).forEach(loid => {
             this.objects[loid]._close();
-        }
+        });
         delete this.conn.lsessions[this.lsid];
     }
 
@@ -636,8 +635,11 @@ class LocalRoot extends LocalObjectBase {
         // Subclasses of LocalRoot can call this to automatically create
         // new_Foo() factory functions.
         newables.forEach(C => {
-            let _new = C._new; // the class can provide its own factory function
-            if (_new === void 0) {
+            let _new;
+            if (C.hasOwnProperty('_new')) {
+                // the class can provide its own factory function
+                _new = C._new;
+            } else {
                 _new = (...args) => new C(...args);
                 _new.help = C.help;
             }
@@ -912,8 +914,8 @@ class RemoteSessionBase extends Session {
         // the returned Promise is cancellable (Promises derived from it by
         // then() are not)
         rcall.cancel = () => {
-            let rcall = this.conn.rcalls[rcid];
-            if (rcall !== void 0) {
+            if (this.conn.rcalls.hasOwnProperty(rcid)) {
+                let rcall = this.conn.rcalls[rcid];
                 delete this.conn.rcalls[rcid];
                 let msg = {cancel: rcid};
                 if (this.dstid !== null) {
@@ -929,7 +931,7 @@ class RemoteSessionBase extends Session {
     unmarshalObj(ref) {
         let oid = ref[OBJECT_ID];
 
-        if ('rsid' in ref) {
+        if (ref.hasOwnProperty('rsid')) {
             // this is actually a LocalObject (a callback) being passed back to
             // us
             let lsession = this.conn.unmarshalLsession(ref.rsid);
@@ -951,7 +953,7 @@ class RemoteSessionBase extends Session {
 
         let robj = rsession.unmarshalId(oid);
 
-        if ('bridge' in ref) {
+        if (ref.hasOwnProperty('bridge')) {
             return rsession.unmarshalBridge(robj, ref.bridge);
         }
 
@@ -1069,7 +1071,9 @@ class Registry {
     }
 
     get(id) {
-        return this.objects[id];
+        if (this.objects.hasOwnProperty(id)) {
+            return this.objects[id];
+        }
     }
 
     remove(id) {
@@ -1081,25 +1085,36 @@ let globalRegistry = new Registry();
 
 class Connection {
     constructor(whither, options = {}) {
-        if (options.rootFactory) {
+        if (options.hasOwnProperty('rootFactory')) {
             this.rootFactory = options.rootFactory;
         } else {
-            let Root = options.root || LocalRoot;
+            let Root = options.hasOwnProperty('root') ?
+                options.root : LocalRoot;
             this.rootFactory = lsession => new Root(lsession);
         }
 
-        this.onopen = options.onopen || (() => {});
-        this.onclose = options.onclose || (() => {});
-        this.logfn = (options.log ||
+        this.onopen = options.hasOwnProperty('onopen') ?
+            options.onopen : (() => {});
+        this.onclose = options.hasOwnProperty('onclose') ?
+            options.onclose : (() => {});
+        this.logfn = options.hasOwnProperty('log') ?
+            options.log :
             ((level, ...args) => {
                 // eslint-disable-next-line no-console
                 console.log(LogLevel[level] || 'Unknown', ...args);
-            }));
-        this.logLevel = options.logLevel === void 0 ?
-            LOG_WARNING : options.logLevel;
-        this.lencode = Codec.registry[options.lformat || 'json'].encode;
-        this.rcodec = Codec.registry[options.rformat || 'json'];
-        this.rcodecBin = Codec.registry[options.rformatBin || 'msgpack'];
+            });
+        this.logLevel = options.hasOwnProperty('logLevel') ?
+            options.logLevel : LOG_WARNING;
+        this.lencode = Codec.registry[
+            options.hasOwnProperty('lformat') ? options.lformat : 'json'
+        ].encode;
+        this.rcodec = Codec.registry[
+            options.hasOwnProperty('rformat') ? options.rformat : 'json'
+        ];
+        this.rcodecBin = Codec.registry[
+            options.hasOwnProperty('rformatBin') ?
+                options.rformatBin : 'msgpack'
+        ];
 
         // connection state
         this.lsessions = {}; // local sessions
@@ -1120,7 +1135,7 @@ class Connection {
         new NativeSession(this, -1, (lsession => new LocalRoot(lsession)));
 
         // register the connection
-        if (options.registry) {
+        if (options.hasOwnProperty('registry')) {
             this.registry = options.registry;
         } else {
             this.registry = globalRegistry;
@@ -1174,7 +1189,7 @@ class Connection {
                         return;
                     }
 
-                    if ('format' in msg && msg.format !== null) {
+                    if (msg.hasOwnProperty('format') && msg.format !== null) {
                         this.header = msg;
                         this.headerRcodec = rcodec;
                     } else {
@@ -1204,22 +1219,13 @@ class Connection {
     }
 
     dispatch(rcodec, header, body = null) {
-        let dstid = header.dst;
-        if (dstid === void 0) {
-            dstid = null;
-        }
-        let method = header.method;
+        let dstid = header.hasOwnProperty('dst') ? header.dst : null;
+        let method = header.hasOwnProperty('method') ? header.method : null;
         if (method) {
             // this is a call
-            let cid = header.id;
-            if (cid === void 0) {
-                cid = null;
-            }
+            let cid = header.hasOwnProperty('id') ? header.id : null;
             if (dstid === null) {
-                let srcid = header.src;
-                if (srcid === void 0) {
-                    srcid = null;
-                }
+                let srcid = header.hasOwnProperty('src') ? header.src : null;
                 try {
                     if (isPrivate(method)) {
                         throw new Errors.AttributeError(
@@ -1249,7 +1255,7 @@ class Connection {
                         Promise.resolve(result)
                             .then(result => {
                                 if (cid !== null) {
-                                    if (cid in this.lcalls) {
+                                    if (this.lcalls.hasOwnProperty(cid)) {
                                         delete this.lcalls[cid];
                                     }
                                     this.respond(srcid, cid, result, lcodec);
@@ -1257,7 +1263,7 @@ class Connection {
                             })
                             .catch(exc => {
                                 // the method threw an asynchronous exception
-                                if (cid in this.lcalls) {
+                                if (this.lcalls.hasOwnProperty(cid)) {
                                     delete this.lcalls[cid];
                                 }
                                 this.onError(srcid, cid, exc, lcodec);
@@ -1275,12 +1281,13 @@ class Connection {
                 this.bridgeCall(dstid, cid, header, body);
             }
         } else {
-            let cancelid = header.cancel;
-            if (cancelid !== void 0 && cancelid !== null) {
+            let cancelid = header.hasOwnProperty('cancel') ?
+                header.cancel : null;
+            if (cancelid !== null) {
                 // this is a cancel request
                 if (dstid === null) {
-                    let lcall = this.lcalls[cancelid];
-                    if (lcall !== void 0) {
+                    if (this.lcalls.hasOwnProperty(cancelid)) {
+                        let lcall = this.lcalls[cancelid];
                         delete this.lcalls[cancelid];
                         lcall.cancel();
                     }
@@ -1291,8 +1298,8 @@ class Connection {
                 // this is a response
                 let cid = header.id;
                 if (dstid === null) {
-                    let rcall = this.rcalls[cid];
-                    if (rcall !== void 0) {
+                    if (this.rcalls.hasOwnProperty(cid)) {
+                        let rcall = this.rcalls[cid];
                         delete this.rcalls[cid];
                         try {
                             let msg;
@@ -1328,7 +1335,10 @@ class Connection {
             dst.send(header, body);
 
             if (cid !== null) {
-                (dst.bcalls[this.id] || (dst.bcalls[this.id] = {}))[cid] = 1;
+                if (!dst.bcalls.hasOwnProperty(this.id)) {
+                    dst.bcalls[this.id] = {};
+                }
+                dst.bcalls[this.id][cid] = 1;
             }
         }
     }
@@ -1336,7 +1346,8 @@ class Connection {
     bridgeResponse(dstid, cid, header, body) {
         let dst = this.registry.get(dstid);
         if (dst !== void 0) {
-            if (this.bcalls[dstid] && this.bcalls[dstid][cid]) {
+            if (this.bcalls.hasOwnProperty(dstid) &&
+                    this.bcalls[dstid].hasOwnProperty(cid)) {
                 delete this.bcalls[dstid][cid];
             }
 
@@ -1354,73 +1365,82 @@ class Connection {
     }
 
     applyBegin(rcodec, srcid, method, msg) {
-        let lref = msg.this;
-        let loid;
-        let lsid;
-        if (lref === void 0 || lref === null) {
-            loid = null;
-            lsid = null;
-        } else if (Array.isArray(lref)) {
-            throw new TypeError('Malformed this object');
-        } else {
-            if (lref instanceof Reference) {
-                lref = lref.ref;
-            }
-            loid = lref[OBJECT_ID];
-            if (loid === void 0) {
-                loid = null;
-            }
-            lsid = lref.rsid;
-            if (lsid === void 0) {
-                lsid = null;
+        let loid = null;
+        let lsid = null;
+        if (msg.hasOwnProperty('this')) {
+            let lref = msg.this;
+            if (Array.isArray(lref)) {
+                throw new TypeError('Malformed this object');
+            } else {
+                if (lref instanceof Reference) {
+                    lref = lref.ref;
+                }
+                if (lref.hasOwnProperty(OBJECT_ID)) {
+                    loid = lref[OBJECT_ID];
+                }
+                if (lref.hasOwnProperty('rsid')) {
+                    lsid = lref.rsid;
+                }
             }
         }
-
         return [this.unmarshalLsession(lsid), loid];
     }
 
     applyFinish(rcodec, srcid, method, lsession, loid, msg) {
         let lobj = lsession.unmarshalId(loid);
         let f = getAttr(lobj, method);
-        let params = ('params' in msg) ?
+        let params = msg.hasOwnProperty('params') ?
             lsession.unmarshalAll(rcodec, msg.params, srcid) : [];
         return f(...params);
     }
 
     getresult(rcodec, rsession, msg) {
-        if ('result' in msg) {
+        if (msg.hasOwnProperty('result')) {
             return rsession.unmarshalAll(rcodec, msg.result);
         }
 
-        let error = msg.error;
-        if (!error) {
+        if (!msg.hasOwnProperty('error')) {
             throw new Error('Unspecified error');
         }
 
         // attempt to unmarshal error object; fallback to generic Error
-        let message = error.message;
-        if (message === void 0 || message === '') {
-            message = 'Unspecified error';
-        } else {
-            message = '' + message;
+        let error = msg.error;
+        let message = '';
+        if (error.hasOwnProperty('message')) {
+            message = '' + error.message;
         }
-        let name = '' + error.name;
-        let Etype = Errors[name] || globals[name];
-        if (!(typeof Etype === 'function' &&
-                (Etype === Error || Etype.prototype instanceof Error))) {
-            Etype = Error;
-            if (name) {
-                message = name + ': ' + message;
+        if (message === '') {
+            message = 'Unspecified error';
+        }
+        let Etype;
+        if (error.hasOwnProperty('name')) {
+            let name = error.name;
+            if (Errors.hasOwnProperty(name)) {
+                Etype = Errors[name];
+            } else {
+                Etype = globals[name];
+                if (!(typeof Etype === 'function' &&
+                        (Etype === Error ||
+                            Etype.prototype instanceof Error))) {
+                    Etype = Error;
+                    if (name) {
+                        message = name + ': ' + message;
+                    }
+                }
             }
         }
-        let stack = error.stack;
         let exc = new Etype(message);
-        if (typeof stack === 'string') {
-            if (typeof exc.stack === 'string') {
-                exc.stack = stack.trim() + '\n\nThe above exception was the ' +
-                    'direct cause of the following exception:\n\n' + exc.stack;
-            } else {
-                exc.stack = stack;
+        if (error.hasOwnProperty('stack')) {
+            let stack = error.stack;
+            if (typeof stack === 'string') {
+                if (exc.hasOwnProperty('stack') &&
+                        typeof exc.stack === 'string') {
+                    exc.stack = stack.trim() + '\n\nThe above exception was ' +
+                        'the direct cause of the following exception:\n\n' +
+                        exc.stack;
+                } else {
+                    exc.stack = stack;
+                }
             }
         }
         throw exc;
@@ -1430,7 +1450,7 @@ class Connection {
         if (lcid === null) {
             this.log(LOG_ERROR, exc);
         } else {
-            if (exc.name === void 0 || exc.message === void 0) {
+            if (!(exc instanceof Error)) {
                 exc = new Error(exc);
             }
             this.error(srcid, lcid, exc, lcodec);
@@ -1446,51 +1466,51 @@ class Connection {
     }
 
     lclose() {
-        for (let lsid in this.lsessions) {
+        Object.keys(this.lsessions).forEach(lsid => {
             this.lsessions[lsid].objects[null]._release();
-        }
+        });
     }
 
     rclose() {
         this.registry.remove(this.id);
 
         // cancel any outstanding local calls
-        for (let lcid in this.lcalls) {
+        Object.keys(this.lcalls).forEach(lcid => {
             this.lcalls[lcid].cancel();
-        }
+        });
 
         // dispose of outstanding remote calls
-        for (let rcid in this.rcalls) {
+        Object.keys(this.rcalls).forEach(rcid => {
             this.rcalls[rcid].reject(
                 new Errors.DisconnectedError('Connection lost'));
-        }
+        });
 
         // dispose of outstanding bridged calls (as callee)
-        for (let srcid in this.bcalls) {
+        Object.keys(this.bcalls).forEach(srcid => {
             let src = this.registry.get(srcid);
             if (src !== void 0) {
-                for (let cid in this.bcalls[srcid]) {
+                Object.keys(this.bcalls[srcid]).forEach(cid => {
                     src.error(
                         null, cid,
                         new Errors.DisconnectedError(
                             'Bridged connection lost'));
-                }
+                });
             }
-        }
+        });
 
         // dispose of outstanding bridged calls (as caller)
-        for (let id in this.registry.objects) {
+        Object.keys(this.registry.objects).forEach(id => {
             let conn = this.registry.objects[id];
-            let cids = conn.bcalls[this.id];
-            if (cids !== void 0) {
+            if (conn.bcalls.hasOwnProperty(this.id)) {
+                let cids = conn.bcalls[this.id];
                 delete conn.bcalls[this.id];
                 if (!conn.closed()) {
-                    for (let cid in cids) {
+                    Object.keys(cids).forEach(cid => {
                         conn.send({cancel: cid});
-                    }
+                    });
                 }
             }
-        }
+        });
     }
 
     sendcall(lcodec, dstid, rcid, robj, method, params = []) {
@@ -1608,7 +1628,8 @@ class Connection {
 let connect = function(whither, options = {}) {
     return new Promise((resolve, reject) => {
         let conn = new Connection(whither, options);
-        let onclose = options.onclose || (() => {});
+        let onclose = options.hasOwnProperty('onclose') ?
+            options.onclose : (() => {});
         conn.onopen = conn => {
             conn.onclose = onclose;
             resolve(conn);

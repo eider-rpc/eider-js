@@ -210,7 +210,7 @@ describe('Eider', function() {
             RemoteAPI.resolveTarget(this._lsession.conn);
         }
 
-        bridge() {
+        createBridge() {
             return RemoteAPI.target
                 .then(t => new Eider.Bridge(this._lsession, t));
         }
@@ -255,7 +255,16 @@ describe('Eider', function() {
     let conn3;
     let rrootBin;
 
+    let KEYWORDS = `__*__ bridge cancel dst error format id lformat lsid message
+        method name params result rsid src stack this`.split(/\s+/);
+
     before(function() {
+        // All tests should still pass if Object.prototype has been extended.
+        KEYWORDS.forEach(name => {
+            // eslint-disable-next-line no-extend-native
+            Object.prototype[name] = 'monkey-patched';
+        });
+
         return new Promise((resolve, reject) => {
             server = Eider.serve(0, {root: RemoteAPI});
             server.on('listening', () => {
@@ -279,7 +288,7 @@ describe('Eider', function() {
                         rrootCodec = c.createSession('json', 'json').root();
                         rrootMsgpack =
                             c.createSession('msgpack', 'msgpack').root();
-                        return rroot.bridge()
+                        return rroot.createBridge()
                             .then(b => {
                                 broot = b.root();
                             });
@@ -302,6 +311,9 @@ describe('Eider', function() {
         conn2.close();
         conn3.close();
         server.close();
+        KEYWORDS.forEach(name => {
+            delete Object.prototype[name];
+        });
     });
 
     it('call a remote method', function() {
@@ -589,7 +601,7 @@ describe('Eider', function() {
         /* eslint-disable indent */
         function() {
             let bval;
-            return Eider.using(rroot.bridge(), broot =>
+            return Eider.using(rroot.createBridge(), broot =>
                     broot.new_Value(0).then(bv => {
                         bval = bv;
                     })

@@ -21,9 +21,6 @@ module.exports = {
             "error",
             "never"
         ],
-        "guard-for-in": [
-            "off"
-        ],
         "indent": [
             "error",
             4,
