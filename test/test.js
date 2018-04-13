@@ -373,6 +373,25 @@ describe('Eider', function() {
             );
     });
 
+    it('create a new remote property', function() {
+        return rroot.new_Value(3)
+            .then(x =>
+                x.set_extra(5)
+                    .then(() => x.extra())
+                    .then(x => assert.equal(x, 5))
+            );
+    });
+
+    it('assign to a forbidden remote property', function() {
+        return rroot.new_Value(4)
+            .then(x =>
+                x.set_release(6).then(
+                    () => assert(false),
+                    exc => assert(exc instanceof Eider.Errors.AttributeError)
+                )
+            );
+    });
+
     it('call a nonexistent remote method', function() {
         return rroot.foo(42)
             .then(

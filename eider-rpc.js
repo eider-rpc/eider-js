@@ -153,21 +153,6 @@ let isPrivate = function(name) {
         name == 'toJSON');
 };
 
-let getAttr = function(obj, attr) {
-    let a = obj[attr];
-    if (a === void 0) {
-        throw new Errors.AttributeError(
-            "'" + obj.constructor.name + "' object has no attribute '" + attr +
-            "'");
-    }
-    if (a === Object.prototype[attr]) {
-        throw new Errors.AttributeError(
-            "Cannot access forbidden attribute '" + attr + "' of '" +
-            obj.constructor.name + "' object");
-    }
-    return a.bind(obj);
-};
-
 class Codec {
     constructor(name, encode, decode, inband = true) {
         this.name = name;
@@ -364,7 +349,20 @@ class Session {
                 "Cannot access private attribute '" + method + "' of '" +
                 obj.constructor.name + "' object");
         }
-        return getAttr(obj, method);
+
+        let a = obj[method];
+        if (a === void 0) {
+            throw new Errors.AttributeError(
+                "'" + obj.constructor.name + "' object has no attribute '" +
+                method + "'");
+        }
+        if (a === Object.prototype[method]) {
+            throw new Errors.AttributeError(
+                "Cannot access forbidden attribute '" + method + "' of '" +
+                obj.constructor.name + "' object");
+        }
+
+        return a.bind(obj);
     }
 
     _enter() {
@@ -1391,9 +1389,65 @@ class Connection {
 
     applyFinish(rcodec, srcid, method, lsession, loid, msg) {
         let lobj = lsession.unmarshalId(loid);
-        let f = getAttr(lobj, method);
         let params = msg.hasOwnProperty('params') ?
             lsession.unmarshalAll(rcodec, msg.params, srcid) : [];
+
+        let a = lobj[method];
+        if (a === void 0) {
+            if (method.substring(0, 4) == 'set_' && params.length == 1) {
+                // direct property assignment
+                let name = method.substring(4);
+                if (isPrivate(name)) {
+                    throw new Errors.AttributeError(
+                        "Cannot assign to private attribute '" + name + "'");
+                }
+                a = lobj[name];
+                if (a !== void 0) {
+                    if (a === Object.prototype[name]) {
+                        throw new Errors.AttributeError(
+                            "Cannot assign to forbidden attribute '" + name +
+                            "' of '" + lobj.constructor.name + "' object");
+                    }
+                    let callable = true;
+                    try {
+                        a.bind(lobj);
+                    } catch (exc) {
+                        if (exc instanceof TypeError) {
+                            callable = false;
+                        } else {
+                            throw exc;
+                        }
+                    }
+                    if (callable) {
+                        throw new Errors.AttributeError(
+                            "Cannot assign to method '" + name + "'");
+                    }
+                }
+                lobj[name] = params[0];
+                return;
+            }
+            throw new Errors.AttributeError(
+                "'" + lobj.constructor.name + "' object has no attribute '" +
+                method + "'");
+        }
+        if (a === Object.prototype[method]) {
+            throw new Errors.AttributeError(
+                "Cannot access forbidden attribute '" + method + "' of '" +
+                lobj.constructor.name + "' object");
+        }
+
+        let f;
+        try {
+            f = a.bind(lobj);
+        } catch (exc) {
+            if (exc instanceof TypeError && !params.length) {
+                // direct property access
+                return a;
+            }
+            throw exc;
+        }
+
+        // method call
         return f(...params);
     }
 
