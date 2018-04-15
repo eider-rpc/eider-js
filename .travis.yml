@@ -6,7 +6,8 @@ node_js:
     - 9
     - node
 script:
-    - npm test
+    - EIDER_WS_LIB=uws npm test
+    - EIDER_WS_LIB=ws npm test
     - npm run lint
 
 # need C++11-compatible compiler to build the weak package

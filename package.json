@@ -20,6 +20,7 @@
   },
   "optionalDependencies": {
     "msgpack-lite": "^0.1.26",
+    "uws": "^9.14.0",
     "weak": "^1.0.1",
     "ws": "^5.1.0"
   },

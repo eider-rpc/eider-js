@@ -21,6 +21,9 @@ limitations under the License.
 let assert = require('assert');
 let Eider = require('..');
 
+let WS_LIB = process.env.EIDER_WS_LIB || 'uws';
+let WS = require(WS_LIB);
+
 describe('Eider', function() {
     function aiter2array(it) {
         return it.then(them => {
@@ -281,11 +284,11 @@ describe('Eider', function() {
         });
 
         return new Promise((resolve, reject) => {
-            server = Eider.serve(0, {root: RemoteAPI});
+            server = Eider.serve(0, {root: RemoteAPI, Server: WS.Server});
             server.on('listening', () => {
-                let url = 'ws://localhost:' + server._server.address().port;
+                let url = 'ws://localhost:' + server.address().port;
                 resolve(Promise.all([
-                    Eider.connect(url, {
+                    Eider.connect(new WS(url), {
                         root: TargetAPI
                     }).then(c => {
                         conn = c;
@@ -294,7 +297,7 @@ describe('Eider', function() {
                         );
                     }),
 
-                    Eider.connect(url, {
+                    Eider.connect(new WS(url), {
                         root: LocalAPI
                     }).then(c => {
                         conn2 = c;
@@ -309,7 +312,7 @@ describe('Eider', function() {
                             });
                     }),
 
-                    Eider.connect(url, {
+                    Eider.connect(new WS(url), {
                         lformat: 'msgpack'
                     }).then(c => {
                         conn3 = c;

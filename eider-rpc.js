@@ -30,24 +30,41 @@ let globals =
     typeof global === 'object' && global.global === global && global ||
     {};
 
-// Use built-in WebSocket object, or fallback to `ws` package
+// Use built-in WebSocket object, or fallback to third-party library
+const WS_LIB_PRIORITY = ['uws', 'ws'];
 let WS = globals.WebSocket;
 if (WS === void 0) {
-    try {
-        WS = require('ws');
-    } catch (exc) {
-        // ws package is optional
+    for (let lib of WS_LIB_PRIORITY) {
+        try {
+            WS = require(lib);
+            break;
+        } catch (exc) {
+            // WebSocket-like object may be provided at runtime
+        }
     }
 }
 let WSServer;
 if (WS !== void 0) {
     WSServer = WS.Server;
     if (WSServer === void 0) {
-        try {
-            WSServer = require('ws').Server;
-        } catch (exc) {
-            // ws package is optional
+        for (let lib of WS_LIB_PRIORITY) {
+            try {
+                WSServer = require(lib).Server;
+                if (WSServer !== void 0) {
+                    break;
+                }
+            } catch (exc) {
+                // Server-like object may be provided at runtime
+            }
         }
+    }
+    if (WSServer !== void 0 && WSServer.prototype.address === void 0) {
+        // `uws` doesn't include the address() method as of v9.14.0
+        Object.defineProperty(WSServer.prototype, 'address', {
+            value: function() {
+                return this.httpServer.address();
+            }
+        });
     }
 }
 
@@ -1176,13 +1193,18 @@ class Connection {
             };
 
             ws.onmessage = event => {
-                this.log(LOG_DEBUG, 'recv', event.data);
+                let data = event.data;
+                if (data instanceof ArrayBuffer) {
+                    // `uws` uses ArrayBuffer, while `ws` uses Uint8Array
+                    data = new Uint8Array(data);
+                }
+                this.log(LOG_DEBUG, 'recv', data);
                 if (this.header === null) {
-                    let rcodec = (typeof event.data === 'string') ?
+                    let rcodec = (typeof data === 'string') ?
                         this.rcodec : this.rcodecBin;
                     let msg;
                     try {
-                        msg = rcodec.decode(event.data);
+                        msg = rcodec.decode(data);
                     } catch (exc) {
                         this.log(LOG_ERROR, 'Invalid data received on Eider ' +
                             'WebSocket connection:', exc);
@@ -1197,7 +1219,7 @@ class Connection {
                         this.dispatch(rcodec, msg);
                     }
                 } else {
-                    this.dispatch(this.headerRcodec, this.header, event.data);
+                    this.dispatch(this.headerRcodec, this.header, data);
                     this.header = null;
                 }
             };
@@ -1699,7 +1721,8 @@ let connect = function(whither, options = {}) {
 };
 
 let serve = function(port, options = {}) {
-    let server = new WSServer({port});
+    let Server = options.hasOwnProperty('Server') ? options.Server : WSServer;
+    let server = new Server({port});
     server.on('connection', ws => connect(ws, options));
     return server;
 };
