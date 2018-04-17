@@ -20,14 +20,14 @@
   },
   "optionalDependencies": {
     "msgpack-lite": "^0.1.26",
-    "uws": "^9.14.0",
-    "weak": "^1.0.1",
-    "ws": "^5.1.0"
+    "weak": "^1.0.1"
   },
   "devDependencies": {
     "babel-minify": "^0.3.0",
     "eslint": "^4.19.1",
     "eslint-config-google": "^0.9.1",
-    "mocha": "^5.0.5"
+    "mocha": "^5.0.5",
+    "uws": "^9.14.0",
+    "ws": "^5.1.0"
   }
 }
