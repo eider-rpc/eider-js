@@ -208,7 +208,8 @@ new Codec(
             if (typeof value.toJSON === 'function') {
                 return value.toJSON();
             }
-            if (Object.getPrototypeOf(value).constructor === Object) {
+            let ctor = Object.getPrototypeOf(value).constructor;
+            if ([Object, Boolean, Number, String].includes(ctor)) {
                 return value;
             }
             return conn.lsessions[-1].marshal(
@@ -263,7 +264,11 @@ if (msgpack !== void 0) {
                 if (ArrayBuffer.isView(obj)) {
                     return obj.buffer;
                 }
-                if (Object.getPrototypeOf(obj).constructor === Object) {
+                let ctor = Object.getPrototypeOf(obj).constructor;
+                if ([Boolean, Number, String].includes(ctor)) {
+                    return obj.valueOf();
+                }
+                if (ctor === Object) {
                     return Object.keys(obj).reduce((o, k) => {
                         let m = marshalAll(obj[k]);
                         if (m !== void 0) {

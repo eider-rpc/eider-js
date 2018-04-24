@@ -267,7 +267,12 @@ describe('Eider', function() {
             {'undef': undefined, 'foo bar': 'baz'}],
         'false': false,
         'π': 3.14159,
-        'a': new NativeObject(4)
+        'a': new NativeObject(4),
+        /* eslint-disable no-new-wrappers */
+        'n': new Number(42),
+        's': new String('spam'),
+        'b': new Boolean(false)
+        /* eslint-enable no-new-wrappers */
     };
     let GARBAGE_OUT = {
         'x': 'y',
@@ -275,7 +280,10 @@ describe('Eider', function() {
         'z': [2, null, null, true, {'foo bar': 'baz'}],
         'false': false,
         'π': 3.14159,
-        'a': GARBAGE_IN.a
+        'a': GARBAGE_IN.a,
+        'n': 42,
+        's': 'spam',
+        'b': false
     };
 
     before(function() {
