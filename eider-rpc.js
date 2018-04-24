@@ -164,10 +164,9 @@ const LogLevel = {
 };
 
 let isPrivate = function(name) {
-    // Properties with names beginning with an underscore, or with certain
-    // special names defined or used by JavaScript, cannot be accessed remotely.
-    return (name.substring(0, 1) == '_' || name == 'constructor' ||
-        name == 'toJSON');
+    // Properties with names beginning with an underscore, or with the special
+    // name 'constructor' used by JavaScript, cannot be accessed remotely.
+    return name.substring(0, 1) == '_' || name == 'constructor';
 };
 
 class Codec {
@@ -202,11 +201,14 @@ new Codec(
             case 'string':
                 return value;
             }
-            if (value === void 0 || value === null || Array.isArray(value)) {
+            if (value === void 0 || value === null) {
                 return value;
             }
-            if (typeof value.toJSON === 'function') {
-                return value.toJSON();
+            if (typeof value._marshal === 'function') {
+                return value._marshal();
+            }
+            if (Array.isArray(value)) {
+                return value;
             }
             let ctor = Object.getPrototypeOf(value).constructor;
             if ([Object, Boolean, Number, String].includes(ctor)) {
@@ -251,11 +253,11 @@ if (msgpack !== void 0) {
                 if (obj === void 0 || obj === null) {
                     return obj;
                 }
+                if (typeof obj._marshal === 'function') {
+                    return new ExtBuffer(msgpack.encode(obj._marshal()), 0);
+                }
                 if (Array.isArray(obj)) {
                     return obj.map(marshalAll);
-                }
-                if (typeof obj.toJSON === 'function') {
-                    return new ExtBuffer(msgpack.encode(obj.toJSON()), 0);
                 }
                 if (obj instanceof ArrayBuffer ||
                         {}.toString.call(obj) === '[object ArrayBuffer]') {
@@ -294,7 +296,7 @@ class Reference {
         this.ref = ref;
     }
 
-    toJSON() {
+    _marshal() {
         return this.ref;
     }
 }
@@ -512,7 +514,7 @@ class LocalObjectBase {
         // The following monstrosity allows us to pass callbacks to remote
         // method calls in a natural way, e.g.
         //    robj.f(lobj.g.bind(lobj))
-        // It works by adding a toJSON() method to the bound function object
+        // It works by adding a _marshal() method to the bound function object
         // that gets called when it is marshalled.  It also forwards the 'help'
         // property, if any, to the bound function object.  All other semantics
         // of Function.prototype.bind() remain untouched.
@@ -527,7 +529,7 @@ class LocalObjectBase {
                                 return function(that, ...args) {
                                     // eslint-disable-next-line no-invalid-this
                                     let bf = prop2.call(this, that, ...args);
-                                    bf.toJSON = () => {
+                                    bf._marshal = () => {
                                         ++that._nref;
                                         return {
                                             lsid: that._lsession.lsid,
@@ -548,7 +550,7 @@ class LocalObjectBase {
         });
     }
 
-    toJSON() {
+    _marshal() {
         ++this._nref;
         return this._lref;
     }
@@ -784,7 +786,7 @@ class RemoteObject {
 
                     // allow the bound method to be marshalled for use as a
                     // callback
-                    bf.toJSON = () => ({
+                    bf._marshal = () => ({
                         rsid: that._rdata.rref.rsid,
                         [OBJECT_ID]: that._rdata.rref[OBJECT_ID],
                         method: key
@@ -805,7 +807,7 @@ class RemoteObject {
         });
     }
 
-    toJSON() {
+    _marshal() {
         return this._rdata.rref;
     }
 
