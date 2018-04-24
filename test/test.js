@@ -266,14 +266,16 @@ describe('Eider', function() {
         'z': [2, undefined, null, true,
             {'undef': undefined, 'foo bar': 'baz'}],
         'false': false,
-        'π': 3.14159
+        'π': 3.14159,
+        'a': new NativeObject(4)
     };
     let GARBAGE_OUT = {
         'x': 'y',
         // undefined is converted to null in arrays, and omitted in objects
         'z': [2, null, null, true, {'foo bar': 'baz'}],
         'false': false,
-        'π': 3.14159
+        'π': 3.14159,
+        'a': GARBAGE_IN.a
     };
 
     before(function() {

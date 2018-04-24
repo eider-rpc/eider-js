@@ -272,8 +272,10 @@ if (msgpack !== void 0) {
                         return o;
                     }, {});
                 }
-                return conn.lsessions[-1].marshal(
-                    obj, typeof obj === 'function' ? 'call' : null);
+                return new ExtBuffer(
+                    msgpack.encode(conn.lsessions[-1].marshal(obj,
+                        typeof obj === 'function' ? 'call' : null)),
+                    0);
             };
             return msgpack.encode(marshalAll(data), options);
         },
