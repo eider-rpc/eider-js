@@ -82,8 +82,8 @@ let using = function(mgr, body) {
     //
     // The following Python code:
     //
-    //    with foo as bar:
-    //        quux = yield from bar.baz()
+    //    async with foo as bar:
+    //        quux = await bar.baz()
     //        ...
     //
     // could be written like this in JavaScript:
@@ -94,24 +94,32 @@ let using = function(mgr, body) {
     //        })
     //    ));
 
-    return Promise.resolve(mgr).then(mgr => {
-        let ctx = mgr._enter();
-        let result;
-        try {
-            result = body(ctx);
-        } catch (exc) {
-            mgr._exit();
-            throw exc;
-        }
-        return Promise.resolve(result)
-            .then(result => {
-                mgr._exit();
-                return result;
-            }, exc => {
-                mgr._exit();
-                throw exc;
-            });
-    });
+    return Promise.resolve(mgr).then(mgr =>
+        Promise.resolve(mgr._enter()).then(ctx => {
+            let result;
+            try {
+                result = body(ctx);
+            } catch (exc) {
+                return Promise.resolve(mgr._exit(exc)).then(suppress => {
+                    if (!suppress) {
+                        throw exc;
+                    }
+                });
+            }
+            return Promise.resolve(result)
+                .then(result =>
+                    Promise.resolve(mgr._exit()).then(_ =>
+                        result
+                    ),
+                exc =>
+                    Promise.resolve(mgr._exit(exc)).then(suppress => {
+                        if (!suppress) {
+                            throw exc;
+                        }
+                    })
+                );
+        })
+    );
 };
 
 let asyncIterator = Symbol.asyncIterator;
@@ -395,8 +403,8 @@ class Session {
         return this.root();
     }
 
-    _exit() {
-        this.close();
+    _exit(exc) {
+        return this.close();
     }
 }
 
@@ -627,7 +635,7 @@ class LocalObjectBase {
         return this;
     }
 
-    _exit() {
+    _exit(exc) {
         this.release();
     }
 }
@@ -795,7 +803,7 @@ class RemoteObject {
                     // allow explicit resource management
                     bf.close = () => that._close();
                     bf._enter = () => bf;
-                    bf._exit = () => bf.close();
+                    bf._exit = exc => bf.close();
 
                     // sugar methods
                     bf.help = () => that.help(bf);
@@ -825,8 +833,8 @@ class RemoteObject {
         return this;
     }
 
-    _exit() {
-        this._close();
+    _exit(exc) {
+        return this._close();
     }
 
     [asyncIterator]() {
@@ -908,7 +916,7 @@ class RemoteIterator {
         let iter = this.iter;
         this.iter = null;
         if (iter instanceof RemoteObject) {
-            iter._close();
+            return iter._close();
         }
     }
 
@@ -916,8 +924,8 @@ class RemoteIterator {
         return this;
     }
 
-    _exit() {
-        this.close();
+    _exit(exc) {
+        return this.close();
     }
 }
 
@@ -1708,7 +1716,7 @@ class Connection {
         return this;
     }
 
-    _exit() {
+    _exit(exc) {
         this.close();
     }
 }
