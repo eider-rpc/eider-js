@@ -1735,7 +1735,16 @@ class Connection {
     }
 
     _exit(exc) {
-        this.close();
+        return new Promise((resolve, reject) => {
+            if (this.closed()) {
+                resolve();
+            } else {
+                this.on('close', () => {
+                    resolve();
+                });
+                this.close();
+            }
+        });
     }
 }
 
