@@ -1128,10 +1128,18 @@ class Connection {
             this.rootFactory = lsession => new Root(lsession);
         }
 
-        this.onopen = options.hasOwnProperty('onopen') ?
-            options.onopen : (() => {});
-        this.onclose = options.hasOwnProperty('onclose') ?
-            options.onclose : (() => {});
+        this.eventHandlers = {
+            open: [],
+            close: []
+        };
+        let on = options.hasOwnProperty('on') ? options.on : {};
+        if (on.hasOwnProperty('open')) {
+            this.on('open', on.open);
+        }
+        if (on.hasOwnProperty('close')) {
+            this.on('close', on.close);
+        }
+
         this.logfn = options.hasOwnProperty('log') ?
             options.log :
             ((level, ...args) => {
@@ -1185,17 +1193,17 @@ class Connection {
             this.registry.remove(this.id);
 
             // client expects to be notified asynchronously
-            setTimeout(() => this.onclose(this), 0);
+            setTimeout(() => this.emit('close'), 0);
         } else {
             this.ws = ws;
 
             // the websocket might be already open
             if (ws.readyState === 1) {
                 // client expects to be notified asynchronously
-                setTimeout(() => this.onopen(this), 0);
+                setTimeout(() => this.emit('open'), 0);
             } else {
                 ws.onopen = () => {
-                    this.onopen(this);
+                    this.emit('open');
                 };
             }
 
@@ -1206,7 +1214,7 @@ class Connection {
                 this.rclose();
 
                 // notify client code
-                this.onclose(this);
+                this.emit('close');
             };
 
             ws.onmessage = event => {
@@ -1706,6 +1714,16 @@ class Connection {
         this.ws.send(data);
     }
 
+    on(event, handler) {
+        this.eventHandlers[event].push(handler);
+    }
+
+    emit(event) {
+        this.eventHandlers[event].forEach(handler => {
+            handler(this);
+        });
+    }
+
     log(level, ...args) {
         if (level >= this.logLevel) {
             this.logfn(level, ...args);
@@ -1724,16 +1742,16 @@ class Connection {
 let connect = function(whither, options = {}) {
     return new Promise((resolve, reject) => {
         let conn = new Connection(whither, options);
-        let onclose = options.hasOwnProperty('onclose') ?
-            options.onclose : (() => {});
-        conn.onopen = conn => {
-            conn.onclose = onclose;
+        let opened = false;
+        conn.on('open', () => {
+            opened = true;
             resolve(conn);
-        };
-        conn.onclose = conn => {
-            reject(new Error('Could not connect'));
-            onclose(conn);
-        };
+        });
+        conn.on('close', () => {
+            if (!opened) {
+                reject(new Error('Could not connect'));
+            }
+        });
     });
 };
 
