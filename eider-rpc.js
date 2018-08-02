@@ -463,6 +463,14 @@ class LocalSession extends Session {
         return this.objects[loid];
     }
 
+    // In createBridge, default formats to json rather than None because
+    // bridging peer probably doesn't need to decode and re-encode message
+    // bodies.
+    createBridge(rconn, lformat = 'json', rformat= 'json') {
+        return rconn.createSession(null, rformat).then(rsession =>
+            new Bridge(this, rsession, lformat));
+    }
+
     close() {
         this.root().release();
     }
@@ -1013,16 +1021,8 @@ class RemoteSessionBase extends Session {
 }
 
 class RemoteSessionManaged extends RemoteSessionBase {
-    constructor(conn, rsid, lformat = null, rformat = null, dstid = null) {
+    constructor(conn, rsid, lformat = null, dstid = null) {
         super(conn, rsid, lformat, dstid);
-
-        // For efficiency, we want to allow the session to be used without
-        // having to wait first to see if the call to open it was successful.
-        // Pretty much the only way this call can fail is if the connection is
-        // closed.  And any subsequent uses of the session will fail loudly
-        // anyway, so we can safely swallow any exceptions here.
-        Promise.resolve(this._open(rformat)).catch(() => {});
-
         this._root = this.unmarshalId(null);
     }
 
@@ -1036,14 +1036,6 @@ class RemoteSessionManaged extends RemoteSessionBase {
 }
 
 class RemoteSession extends RemoteSessionManaged {
-    constructor(conn, lformat = null, rformat = null) {
-        super(conn, conn.nextrsid++, lformat, rformat);
-    }
-
-    _open(rformat) {
-        return this.call(null, 'open', [this.rsid, rformat]);
-    }
-
     close() {
         return this._root._close();
     }
@@ -1051,17 +1043,11 @@ class RemoteSession extends RemoteSessionManaged {
 
 class BridgedSession extends RemoteSessionManaged {
     constructor(bridge, spec) {
-        super(
-            bridge._rdata.rsession.conn, spec.rsid, spec.lformat, null,
-            spec.dst);
+        super(bridge._rdata.rsession.conn, spec.rsid, spec.lformat, spec.dst);
         this.bridge = bridge;
 
         // the bridge automatically closes the session for us
         this._root._closed = true;
-    }
-
-    _open() {
-        // the bridge automatically opens the session for us
     }
 
     close() {
@@ -1074,13 +1060,11 @@ class BridgedSession extends RemoteSessionManaged {
 }
 
 class Bridge extends LocalObject {
-    // Default formats to json rather than null because bridging peer probably
-    // doesn't need to decode and re-encode message bodies.
-    constructor(lsession, rconn, lformat = 'json', rformat = 'json') {
+    constructor(lsession, rsession, lformat) {
         super(lsession);
-        this._rsession = new RemoteSession(rconn, null, rformat);
+        this._rsession = rsession;
         this._lref.bridge = {
-            dst: rconn.id, rsid: this._rsession.rsid, lformat
+            dst: rsession.conn.id, rsid: rsession.rsid, lformat
         };
     }
 
@@ -1263,7 +1247,10 @@ class Connection {
     }
 
     createSession(lformat = null, rformat = null) {
-        return new RemoteSession(this, lformat, rformat);
+        let rsid = this.nextrsid++;
+        let session = new RemoteSession(this, rsid, lformat);
+        return session.call(null, 'open', [rsid, rformat]).then(() =>
+            session);
     }
 
     dispatch(rcodec, header, body = null) {

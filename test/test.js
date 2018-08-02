@@ -214,8 +214,8 @@ describe('Eider', function() {
         }
 
         createBridge() {
-            return RemoteAPI.target
-                .then(t => new Eider.Bridge(this._lsession, t));
+            return RemoteAPI.target.then(rconn =>
+                this._lsession.createBridge(rconn));
         }
     }
 
@@ -312,21 +312,31 @@ describe('Eider', function() {
                     }).then(c => {
                         conn2 = c;
                         lroot = c.createLocalSession().root();
-                        rroot = c.createSession().root();
-                        rrootCodec = c.createSession('json', 'json').root();
-                        rrootMsgpack =
-                            c.createSession('msgpack', 'msgpack').root();
-                        return rroot.createBridge()
-                            .then(b => {
-                                broot = b.root();
-                            });
+                        return c.createSession().then(sess => {
+                            rroot = sess.root();
+                            return c.createSession('json', 'json')
+                                .then(sess => {
+                                    rrootCodec = sess.root();
+                                    return c.createSession(
+                                        'msgpack', 'msgpack')
+                                        .then(sess => {
+                                            rrootMsgpack = sess.root();
+                                            return rroot.createBridge()
+                                                .then(b => {
+                                                    broot = b.root();
+                                                });
+                                        });
+                                });
+                        });
                     }),
 
                     Eider.connect(new WS(url), {
                         lformat: 'msgpack'
                     }).then(c => {
                         conn3 = c;
-                        rrootBin = c.createSession().root();
+                        return c.createSession().then(sess => {
+                            rrootBin = sess.root();
+                        });
                     })
                 ]));
             });
