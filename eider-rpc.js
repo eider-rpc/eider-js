@@ -1171,8 +1171,14 @@ class Connection {
 
         let ws = (typeof whither === 'string') ? new WS(whither) : whither;
 
+        let resolveOpened;
+        this.opened = new Promise(resolve => {
+            resolveOpened = resolve;
+        });
+
         // the websocket might be already closed
         if (ws.readyState === 3) {
+            resolveOpened(true);
             this.ws = null;
             this.registry.remove(this.id);
 
@@ -1183,10 +1189,12 @@ class Connection {
 
             // the websocket might be already open
             if (ws.readyState === 1) {
+                resolveOpened(true);
                 // client expects to be notified asynchronously
                 setTimeout(() => this.emit('open'), 0);
             } else {
                 ws.onopen = () => {
+                    resolveOpened(true);
                     this.emit('open');
                 };
             }
@@ -1198,6 +1206,7 @@ class Connection {
                 this.rclose();
 
                 // notify client code
+                resolveOpened(false); // nop if already called
                 this.emit('close');
             };
 
@@ -1718,7 +1727,13 @@ class Connection {
     }
 
     _enter() {
-        return this;
+        return this.opened.then(opened => {
+            if (this.closed()) {
+                throw new Errors.DisconnectedError(
+                    opened ? 'Connection closed' : 'Could not connect');
+            }
+            return this;
+        });
     }
 
     _exit(exc) {
@@ -1736,19 +1751,8 @@ class Connection {
 }
 
 let connect = function(whither, options = {}) {
-    return new Promise((resolve, reject) => {
-        let conn = new Connection(whither, options);
-        let opened = false;
-        conn.on('open', () => {
-            opened = true;
-            resolve(conn);
-        });
-        conn.on('close', () => {
-            if (!opened) {
-                reject(new Error('Could not connect'));
-            }
-        });
-    });
+    let conn = new Connection(whither, options);
+    return conn._enter();
 };
 
 let serve = function(port, options = {}) {
