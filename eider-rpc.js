@@ -31,7 +31,7 @@ let globals =
     {};
 
 // Use built-in WebSocket object, or fallback to third-party library
-const WS_LIB_PRIORITY = ['uws', 'ws'];
+const WS_LIB_PRIORITY = ['ws'];
 let WS = globals.WebSocket;
 if (WS === void 0) {
     for (let lib of WS_LIB_PRIORITY) {
@@ -57,14 +57,6 @@ if (WS !== void 0) {
                 // Server-like object may be provided at runtime
             }
         }
-    }
-    if (WSServer !== void 0 && WSServer.prototype.address === void 0) {
-        // `uws` doesn't include the address() method as of v9.14.0
-        Object.defineProperty(WSServer.prototype, 'address', {
-            value: function() {
-                return this.httpServer.address();
-            }
-        });
     }
 }
 
@@ -1218,7 +1210,6 @@ class Connection {
             ws.onmessage = event => {
                 let data = event.data;
                 if (data instanceof ArrayBuffer) {
-                    // `uws` uses ArrayBuffer, while `ws` uses Uint8Array
                     data = new Uint8Array(data);
                 }
                 this.log(LOG_DEBUG, 'recv', data);

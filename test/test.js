@@ -21,7 +21,7 @@ limitations under the License.
 let assert = require('assert');
 let Eider = require('..');
 
-let WS_LIB = process.env.EIDER_WS_LIB || 'uws';
+let WS_LIB = process.env.EIDER_WS_LIB || 'ws';
 let WS = require(WS_LIB);
 
 describe('Eider', function() {

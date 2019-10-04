@@ -14,7 +14,6 @@ env:
     # need C++11-compatible compiler to build the weak package
     - CXX=g++-4.8
   matrix:
-    - EIDER_WS_LIB=uws
     - EIDER_WS_LIB=ws
 addons:
   apt:
@@ -22,9 +21,3 @@ addons:
       - ubuntu-toolchain-r-test
     packages:
       - g++-4.8
-
-matrix:
-    exclude:
-        # uws 9.148.0 fails to compile on node 10
-        - node_js: 10
-          env: EIDER_WS_LIB=uws
