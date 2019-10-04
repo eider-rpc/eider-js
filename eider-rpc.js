@@ -127,17 +127,22 @@ if (asyncIterator === void 0) { // expected circa ES8
     asyncIterator = Symbol('Symbol.asyncIterator');
 }
 
-// Some future ES standard will probably have 'for await'.  Till then, we
-// provide this method.
-let forEachAsync = (iterable, body) =>
+// Like 'for await', but properly cleans up remote resources (and works in
+// environments that don't yet support 'for await').
+let forAwait = (iterable, body) =>
     using(iterable[asyncIterator](), iterator => {
-        let iterate = () =>
-            iterator.next().then(x => {
-                if (!x.done) {
-                    return Promise.resolve(body(x.value))
-                        .then(iterate);
-                }
-            });
+        let iterate = stop => {
+            if (stop === void 0) {
+                return iterator.next().then(x => {
+                    if (!x.done) {
+                        return Promise.resolve(body(x.value))
+                            .then(iterate);
+                    }
+                });
+            } else {
+                return stop;
+            }
+        };
         return iterate();
     });
 
@@ -1769,7 +1774,7 @@ let Eider = {
     connect,
     Connection,
     Errors,
-    forEachAsync,
+    forAwait,
     LocalObject,
     LocalRoot,
     LOG_ERROR,

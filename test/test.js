@@ -28,8 +28,9 @@ describe('Eider', function() {
     function aiter2array(it) {
         return it.then(them => {
             let xs = [];
-            return Eider.forEachAsync(them, x => xs.push(x))
-                .then(() => xs);
+            return Eider.forAwait(them, x => {
+                xs.push(x);
+            }).then(() => xs);
         });
     }
 
