@@ -23,7 +23,7 @@ limitations under the License.
 const VERSION = '0.13.0';
 
 // Get a reference to the global context object
-let globals =
+const globals =
     // browser
     typeof self === 'object' && self.self === self && self ||
     // Node.js
@@ -32,43 +32,49 @@ let globals =
 
 // Use built-in WebSocket object, or fallback to third-party library
 const WS_LIB_PRIORITY = ['ws'];
-let WS = globals.WebSocket;
-if (WS === void 0) {
-    for (let lib of WS_LIB_PRIORITY) {
+const WS = (() => {
+    const WS = globals.WebSocket;
+    if (WS !== void 0) {
+        return WS;
+    }
+    for (const lib of WS_LIB_PRIORITY) {
         try {
-            WS = require(lib);
-            break;
+            return require(lib);
         } catch (exc) {
             // WebSocket-like object may be provided at runtime
         }
     }
-}
-let WSServer;
-if (WS !== void 0) {
-    WSServer = WS.Server;
-    if (WSServer === void 0) {
-        for (let lib of WS_LIB_PRIORITY) {
-            try {
-                WSServer = require(lib).Server;
-                if (WSServer !== void 0) {
-                    break;
-                }
-            } catch (exc) {
-                // Server-like object may be provided at runtime
+})();
+const WSServer = (() => {
+    if (WS === void 0) {
+        return;
+    }
+    let WSServer = WS.Server;
+    if (WSServer !== void 0) {
+        return WSServer;
+    }
+    for (const lib of WS_LIB_PRIORITY) {
+        try {
+            WSServer = require(lib).Server;
+            if (WSServer !== void 0) {
+                return WSServer;
             }
+        } catch (exc) {
+            // Server-like object may be provided at runtime
         }
     }
-}
+})();
 
 // Use `weak` package, or fallback to global weak object
-let weak;
-try {
-    weak = require('weak');
-} catch (exc) {
-    weak = globals.weak;
-}
+const weak = (() => {
+    try {
+        return require('weak');
+    } catch (exc) {
+        return globals.weak;
+    }
+})();
 
-let using = function(mgr, body) {
+const using = function(mgr, body) {
     // This provides automatic releasing of objects that represent external
     // resources, like the "with" statement in Python.
     //
@@ -80,11 +86,10 @@ let using = function(mgr, body) {
     //
     // could be written like this in JavaScript:
     //
-    //    using(foo, bar =>
-    //        bar.baz().then(quux => {
-    //            ...
-    //        })
-    //    ));
+    //    await using(foo, async bar => {
+    //        quux = await bar.baz();
+    //        ...
+    //    });
 
     return Promise.resolve(mgr).then(mgr =>
         Promise.resolve(mgr._enter()).then(ctx => {
@@ -114,16 +119,15 @@ let using = function(mgr, body) {
     );
 };
 
-let asyncIterator = Symbol.asyncIterator;
-if (asyncIterator === void 0) { // expected circa ES8
-    asyncIterator = Symbol('Symbol.asyncIterator');
-}
+const asyncIterator = Symbol.asyncIterator === void 0 ?
+    Symbol('Symbol.asyncIterator') :
+    Symbol.asyncIterator;
 
 // Like 'for await', but properly cleans up remote resources (and works in
 // environments that don't yet support 'for await').
-let forAwait = (iterable, body) =>
+const forAwait = (iterable, body) =>
     using(iterable[asyncIterator](), iterator => {
-        let iterate = stop => {
+        const iterate = stop => {
             if (stop === void 0) {
                 return iterator.next().then(x => {
                     if (!x.done) {
@@ -142,7 +146,7 @@ let forAwait = (iterable, body) =>
 const OBJECT_ID = '__*__';
 
 // Many of the following errors correspond to built-in Python exception types.
-let Errors = {}; [
+const Errors = {}; [
     'AttributeError',
     'CancelledError',
     'DisconnectedError',
@@ -168,11 +172,13 @@ const LogLevel = {
     [LOG_DEBUG]: 'debug'
 };
 
-let isPrivate = function(name) {
+const isPrivate = function(name) {
     // Properties with names beginning with an underscore, or with the special
     // name 'constructor' used by JavaScript, cannot be accessed remotely.
     return name.substring(0, 1) == '_' || name == 'constructor';
 };
+
+const hasOwnProperty = Object.prototype.hasOwnProperty;
 
 class Codec {
     constructor(name, encode, decode, inband = true) {
@@ -187,7 +193,7 @@ class Codec {
         if (name === null) {
             return null;
         }
-        if (Codec.registry.hasOwnProperty(name)) {
+        if (hasOwnProperty.call(Codec.registry, name)) {
             return Codec.registry[name];
         }
         throw new Errors.LookupError('Unknown format: ' + name);
@@ -199,7 +205,7 @@ Codec.registry = {};
 new Codec(
     'json',
     (conn, data) => {
-        let marshal = function(key, value) {
+        const marshal = function(key, value) {
             switch (typeof value) {
             case 'boolean':
             case 'number':
@@ -215,7 +221,7 @@ new Codec(
             if (Array.isArray(value)) {
                 return value;
             }
-            let ctor = Object.getPrototypeOf(value).constructor;
+            const ctor = Object.getPrototypeOf(value).constructor;
             if ([Object, Boolean, Number, String].includes(ctor)) {
                 return value;
             }
@@ -228,27 +234,29 @@ new Codec(
 );
 
 // Use `msgpack-lite` package, or fallback to global msgpack object
-let msgpack;
-try {
-    msgpack = require('msgpack-lite');
-} catch (exc) {
-    msgpack = globals.msgpack;
-}
+const msgpack = (() => {
+    try {
+        return require('msgpack-lite');
+    } catch (exc) {
+        return globals.msgpack;
+    }
+})();
+
 if (msgpack !== void 0) {
     // ExtBuffer class isn't exported as of msgpack-lite 0.1.26
     // We need this because addExtPacker compares constructor names, which won't
     // work for subclasses.
-    let ExtBuffer = msgpack.decode([0xd4, 0, 0]).constructor;
+    const ExtBuffer = msgpack.decode([0xd4, 0, 0]).constructor;
 
-    let codec = msgpack.createCodec({binarraybuffer: true});
-    let options = {codec};
+    const codec = msgpack.createCodec({binarraybuffer: true});
+    const options = {codec};
     codec.addExtUnpacker(
         0, data => new Reference(msgpack.decode(data, options)));
 
     new Codec(
         'msgpack',
         (conn, data) => {
-            let marshalAll = function(obj) {
+            const marshalAll = function(obj) {
                 switch (typeof obj) {
                 case 'boolean':
                 case 'number':
@@ -271,13 +279,13 @@ if (msgpack !== void 0) {
                 if (ArrayBuffer.isView(obj)) {
                     return obj.buffer;
                 }
-                let ctor = Object.getPrototypeOf(obj).constructor;
+                const ctor = Object.getPrototypeOf(obj).constructor;
                 if ([Boolean, Number, String].includes(ctor)) {
                     return obj.valueOf();
                 }
                 if (ctor === Object) {
                     return Object.keys(obj).reduce((o, k) => {
-                        let m = marshalAll(obj[k]);
+                        const m = marshalAll(obj[k]);
                         if (m !== void 0) {
                             o[k] = m;
                         }
@@ -332,7 +340,7 @@ class Session {
         if (Array.isArray(obj)) {
             return obj.map(o => this.unmarshalAllInBand(o, srcid));
         }
-        if (obj.hasOwnProperty(OBJECT_ID)) {
+        if (hasOwnProperty.call(obj, OBJECT_ID)) {
             return this.unmarshal(obj, srcid);
         }
         return Object.keys(obj).reduce((o, k) => {
@@ -368,20 +376,20 @@ class Session {
     }
 
     unmarshal(ref, srcid) {
-        let obj = this.unmarshalObj(ref, srcid);
+        const obj = this.unmarshalObj(ref, srcid);
 
-        if (!ref.hasOwnProperty('method')) {
+        if (!hasOwnProperty.call(ref, 'method')) {
             return obj;
         }
 
-        let method = ref.method;
+        const method = ref.method;
         if (isPrivate(method)) {
             throw new Errors.AttributeError(
                 "Cannot access private attribute '" + method + "' of '" +
                 obj.constructor.name + "' object");
         }
 
-        let a = obj[method];
+        const a = obj[method];
         if (a === void 0) {
             throw new Errors.AttributeError(
                 "'" + obj.constructor.name + "' object has no attribute '" +
@@ -407,7 +415,7 @@ class Session {
 
 class LocalSession extends Session {
     constructor(conn, lsid, rootFactory = null, lformat = null) {
-        if (conn.lsessions.hasOwnProperty(lsid)) {
+        if (hasOwnProperty.call(conn.lsessions, lsid)) {
             throw new Errors.RuntimeError('Session ID in use: ' + lsid);
         }
 
@@ -432,29 +440,29 @@ class LocalSession extends Session {
     }
 
     add(lobj) {
-        let loid = this.nextloid++;
+        const loid = this.nextloid++;
         this.objects[loid] = lobj;
         return loid;
     }
 
     unmarshalObj(ref, srcid) {
-        let oid = ref[OBJECT_ID];
+        const oid = ref[OBJECT_ID];
 
-        if (ref.hasOwnProperty('lsid')) {
+        if (hasOwnProperty.call(ref, 'lsid')) {
             // This is actually a remote object (a callback).  Don't use a real
             // RemoteSession, because we don't manage its lifetime.
-            let rsession = new RemoteSessionBase(
+            const rsession = new RemoteSessionBase(
                 this.conn, ref.lsid, null, srcid);
             rsession.lcodec = this.lcodec;
             return rsession.unmarshalId(oid);
         }
 
-        let lsession = this.conn.unmarshalLsession(ref.rsid);
+        const lsession = this.conn.unmarshalLsession(ref.rsid);
         return lsession.unmarshalId(oid);
     }
 
     unmarshalId(loid) {
-        if (!this.objects.hasOwnProperty(loid)) {
+        if (!hasOwnProperty.call(this.objects, loid)) {
             throw new Errors.LookupError('Unknown object: ' + loid);
         }
         return this.objects[loid];
@@ -480,17 +488,17 @@ class LocalSession extends Session {
     }
 
     free(loid) {
-        let lobj = this.unmarshalId(loid);
+        const lobj = this.unmarshalId(loid);
         lobj.release();
     }
 }
 
 class NativeSession extends LocalSession {
     marshal(obj, method = null) {
-        let loid = this.nextloid++;
+        const loid = this.nextloid++;
         this.objects[loid] = obj;
 
-        let lref = {[OBJECT_ID]: loid, lsid: this.lsid};
+        const lref = {[OBJECT_ID]: loid, lsid: this.lsid};
         if (method !== null) {
             lref.method = method;
         }
@@ -498,7 +506,7 @@ class NativeSession extends LocalSession {
     }
 
     unmarshalId(loid) {
-        let obj = super.unmarshalId(loid);
+        const obj = super.unmarshalId(loid);
         return typeof obj === 'function' ? {call: {bind: () => obj}} : obj;
     }
 
@@ -511,7 +519,7 @@ class NativeSession extends LocalSession {
             return super.free(null); // root
         }
 
-        if (!this.objects.hasOwnProperty(loid)) {
+        if (!hasOwnProperty.call(this.objects, loid)) {
             throw new Errors.LookupError('Unknown object: ' + loid);
         }
         delete this.objects[loid];
@@ -533,15 +541,15 @@ class LocalObjectBase {
         // of Function.prototype.bind() remain untouched.
         return new Proxy(this, {
             get: (target, key) => {
-                let prop = target[key];
+                const prop = target[key];
                 if (typeof prop === 'function') {
                     return new Proxy(prop, {
                         get: (target2, key2) => {
-                            let prop2 = target2[key2];
+                            const prop2 = target2[key2];
                             if (key2 === 'bind') {
                                 return function(that, ...args) {
                                     // eslint-disable-next-line no-invalid-this
-                                    let bf = prop2.call(this, that, ...args);
+                                    const bf = prop2.call(this, that, ...args);
                                     bf._marshal = () => {
                                         ++that._nref;
                                         return {
@@ -601,7 +609,7 @@ class LocalObjectBase {
 
     taxa() {
         let proto = Object.getPrototypeOf(this);
-        let taxa = [];
+        const taxa = [];
         while (proto !== null &&
                 proto.constructor !== LocalRoot &&
                 proto.constructor !== LocalObject) {
@@ -614,7 +622,7 @@ class LocalObjectBase {
     signature(method) {
         // TODO we might be able to fish more information out of
         // method.toString()
-        let params = [];
+        const params = [];
         const alpha = 'abcdefghijklmnopqrstuvwxyz';
         for (let i = 0; i < method.length; ++i) {
             params.push([alpha.charAt(i), null]);
@@ -676,7 +684,7 @@ class LocalRoot extends LocalObjectBase {
         // new_Foo() factory functions.
         newables.forEach(C => {
             let _new;
-            if (C.hasOwnProperty('_new')) {
+            if (hasOwnProperty.call(C, '_new')) {
                 // the class can provide its own factory function
                 _new = C._new;
             } else {
@@ -697,7 +705,7 @@ class LocalSessionManager extends LocalRoot {
     }
 
     free(lsid, loid) {
-        let lsession = this._lsession.conn.unmarshalLsession(lsid);
+        const lsession = this._lsession.conn.unmarshalLsession(lsid);
         lsession.free(loid);
     }
 }
@@ -709,7 +717,7 @@ LocalSessionManager.prototype.free.help =
 
 class LocalObject extends LocalObjectBase {
     constructor(lsession) {
-        let loid = lsession.nextloid++;
+        const loid = lsession.nextloid++;
         super(lsession, loid);
         lsession.objects[loid] = this;
         // this object has no references until it is marshalled
@@ -717,7 +725,7 @@ class LocalObject extends LocalObjectBase {
     }
 }
 
-let closeRemoteObject = rdata => {
+const closeRemoteObject = rdata => {
     // If the session or the connection or the bridged connection is already
     // closed, then don't throw an error, because the remote object is already
     // dead.
@@ -757,7 +765,7 @@ class RemoteObject {
     constructor(rsession, roid) {
         // Add an extra level of indirection so that this's state can still be
         // referenced after this itself is garbage-collected.
-        let rdata = {
+        const rdata = {
             rsession,
             rref: {rsid: rsession.rsid, [OBJECT_ID]: roid},
             closed: false
@@ -774,7 +782,7 @@ class RemoteObject {
 
         return new Proxy(this, {
             get: (target, key, robj) => {
-                let prop = target[key];
+                const prop = target[key];
                 if (prop !== void 0) {
                     return prop;
                 }
@@ -788,14 +796,15 @@ class RemoteObject {
                 }
 
                 // anything else resolves to a remote method
-                let f = function(...args) {
+                const f = function(...args) {
                     // eslint-disable-next-line no-invalid-this
                     return rsession.call(this, key, args);
                 };
 
                 // add special methods to the method when bound
                 f.bind = function(that, ...args) {
-                    let bf = Function.prototype.bind.call(this, that, ...args);
+                    const bf = Function.prototype.bind.call(
+                        this, that, ...args);
 
                     // allow the bound method to be marshalled for use as a
                     // callback
@@ -858,12 +867,12 @@ class RemoteIterator {
     }
 
     next() {
-        let iter = this.iter;
+        const iter = this.iter;
         if (iter === null) {
             return Promise.resolve({value: void 0, done: true});
         }
 
-        let nextSeq = i =>
+        const nextSeq = i =>
             // sequence protocol
             this.robj.get(i)
                 .then(it => {
@@ -878,7 +887,7 @@ class RemoteIterator {
                     throw exc;
                 });
 
-        let nextIter = iter =>
+        const nextIter = iter =>
             // iteration protocol
             iter.next()
                 .then(it => {
@@ -918,7 +927,7 @@ class RemoteIterator {
     }
 
     close() {
-        let iter = this.iter;
+        const iter = this.iter;
         this.iter = null;
         if (iter instanceof RemoteObject) {
             return iter._close();
@@ -942,10 +951,10 @@ class RemoteSessionBase extends Session {
     }
 
     call(robj, method, params = []) {
-        let rcid = this.conn.nextrcid++;
+        const rcid = this.conn.nextrcid++;
         this.conn.sendcall(this.lcodec, this.dstid, rcid, robj, method, params);
 
-        let rcall = new Promise((resolve, reject) => {
+        const rcall = new Promise((resolve, reject) => {
             this.conn.rcalls[rcid] = {
                 rsession: this, resolve, reject
             };
@@ -954,10 +963,10 @@ class RemoteSessionBase extends Session {
         // the returned Promise is cancellable (Promises derived from it by
         // then() are not)
         rcall.cancel = () => {
-            if (this.conn.rcalls.hasOwnProperty(rcid)) {
-                let rcall = this.conn.rcalls[rcid];
+            if (hasOwnProperty.call(this.conn.rcalls, rcid)) {
+                const rcall = this.conn.rcalls[rcid];
                 delete this.conn.rcalls[rcid];
-                let msg = {cancel: rcid};
+                const msg = {cancel: rcid};
                 if (this.dstid !== null) {
                     msg.dst = this.dstid;
                 }
@@ -969,16 +978,16 @@ class RemoteSessionBase extends Session {
     }
 
     unmarshalObj(ref) {
-        let oid = ref[OBJECT_ID];
+        const oid = ref[OBJECT_ID];
 
-        if (ref.hasOwnProperty('rsid')) {
+        if (hasOwnProperty.call(ref, 'rsid')) {
             // this is actually a LocalObject (a callback) being passed back to
             // us
-            let lsession = this.conn.unmarshalLsession(ref.rsid);
+            const lsession = this.conn.unmarshalLsession(ref.rsid);
             return lsession.unmarshalId(oid);
         }
 
-        let rsid = ref.lsid;
+        const rsid = ref.lsid;
         let rsession;
         if (rsid === this.rsid) {
             rsession = this;
@@ -991,9 +1000,9 @@ class RemoteSessionBase extends Session {
             rsession.lcodec = this.lcodec;
         }
 
-        let robj = rsession.unmarshalId(oid);
+        const robj = rsession.unmarshalId(oid);
 
-        if (ref.hasOwnProperty('bridge')) {
+        if (hasOwnProperty.call(ref, 'bridge')) {
             return rsession.unmarshalBridge(robj, ref.bridge);
         }
 
@@ -1081,13 +1090,13 @@ class Registry {
     }
 
     add(obj) {
-        let id = this.nextid++;
+        const id = this.nextid++;
         this.objects[id] = obj;
         return id;
     }
 
     get(id) {
-        if (this.objects.hasOwnProperty(id)) {
+        if (hasOwnProperty.call(this.objects, id)) {
             return this.objects[id];
         }
     }
@@ -1097,14 +1106,14 @@ class Registry {
     }
 }
 
-let globalRegistry = new Registry();
+const globalRegistry = new Registry();
 
 class Connection {
     constructor(whither, options = {}) {
-        if (options.hasOwnProperty('rootFactory')) {
+        if (hasOwnProperty.call(options, 'rootFactory')) {
             this.rootFactory = options.rootFactory;
         } else {
-            let Root = options.hasOwnProperty('root') ?
+            const Root = hasOwnProperty.call(options, 'root') ?
                 options.root : LocalRoot;
             this.rootFactory = lsession => new Root(lsession);
         }
@@ -1113,30 +1122,30 @@ class Connection {
             open: [],
             close: []
         };
-        let on = options.hasOwnProperty('on') ? options.on : {};
-        if (on.hasOwnProperty('open')) {
+        const on = hasOwnProperty.call(options, 'on') ? options.on : {};
+        if (hasOwnProperty.call(on, 'open')) {
             this.on('open', on.open);
         }
-        if (on.hasOwnProperty('close')) {
+        if (hasOwnProperty.call(on, 'close')) {
             this.on('close', on.close);
         }
 
-        this.logfn = options.hasOwnProperty('log') ?
+        this.logfn = hasOwnProperty.call(options, 'log') ?
             options.log :
             ((level, ...args) => {
                 // eslint-disable-next-line no-console
                 console.log(LogLevel[level] || 'Unknown', ...args);
             });
-        this.logLevel = options.hasOwnProperty('logLevel') ?
+        this.logLevel = hasOwnProperty.call(options, 'logLevel') ?
             options.logLevel : LOG_WARNING;
         this.lencode = Codec.registry[
-            options.hasOwnProperty('lformat') ? options.lformat : 'json'
+            hasOwnProperty.call(options, 'lformat') ? options.lformat : 'json'
         ].encode;
         this.rcodec = Codec.registry[
-            options.hasOwnProperty('rformat') ? options.rformat : 'json'
+            hasOwnProperty.call(options, 'rformat') ? options.rformat : 'json'
         ];
         this.rcodecBin = Codec.registry[
-            options.hasOwnProperty('rformatBin') ?
+            hasOwnProperty.call(options, 'rformatBin') ?
                 options.rformatBin : 'msgpack'
         ];
 
@@ -1159,14 +1168,14 @@ class Connection {
         new NativeSession(this, -1, (lsession => new LocalRoot(lsession)));
 
         // register the connection
-        if (options.hasOwnProperty('registry')) {
+        if (hasOwnProperty.call(options, 'registry')) {
             this.registry = options.registry;
         } else {
             this.registry = globalRegistry;
         }
         this.id = this.registry.add(this);
 
-        let ws = (typeof whither === 'string') ? new WS(whither) : whither;
+        const ws = (typeof whither === 'string') ? new WS(whither) : whither;
 
         let resolveOpened;
         this.opened = new Promise(resolve => {
@@ -1214,7 +1223,7 @@ class Connection {
                 }
                 this.log(LOG_DEBUG, 'recv', data);
                 if (this.header === null) {
-                    let rcodec = (typeof data === 'string') ?
+                    const rcodec = (typeof data === 'string') ?
                         this.rcodec : this.rcodecBin;
                     let msg;
                     try {
@@ -1226,7 +1235,8 @@ class Connection {
                         return;
                     }
 
-                    if (msg.hasOwnProperty('format') && msg.format !== null) {
+                    if (hasOwnProperty.call(msg, 'format') &&
+                            msg.format !== null) {
                         this.header = msg;
                         this.headerRcodec = rcodec;
                     } else {
@@ -1252,20 +1262,22 @@ class Connection {
     }
 
     createSession(lformat = null, rformat = null) {
-        let rsid = this.nextrsid++;
-        let session = new RemoteSession(this, rsid, lformat);
+        const rsid = this.nextrsid++;
+        const session = new RemoteSession(this, rsid, lformat);
         return session.call(null, 'open', [rsid, rformat]).then(() =>
             session);
     }
 
     dispatch(rcodec, header, body = null) {
-        let dstid = header.hasOwnProperty('dst') ? header.dst : null;
-        let method = header.hasOwnProperty('method') ? header.method : null;
+        const dstid = hasOwnProperty.call(header, 'dst') ? header.dst : null;
+        const method = hasOwnProperty.call(header, 'method') ?
+            header.method : null;
         if (method) {
             // this is a call
-            let cid = header.hasOwnProperty('id') ? header.id : null;
+            const cid = hasOwnProperty.call(header, 'id') ? header.id : null;
             if (dstid === null) {
-                let srcid = header.hasOwnProperty('src') ? header.src : null;
+                const srcid = hasOwnProperty.call(header, 'src') ?
+                    header.src : null;
                 try {
                     if (isPrivate(method)) {
                         throw new Errors.AttributeError(
@@ -1280,11 +1292,11 @@ class Connection {
                         msg = rcodec.decode(body);
                     }
 
-                    let [lsession, loid] = this.applyBegin(
+                    const [lsession, loid] = this.applyBegin(
                         rcodec, srcid, method, msg);
-                    let lcodec = lsession.lcodec;
+                    const lcodec = lsession.lcodec;
                     try {
-                        let result = this.applyFinish(
+                        const result = this.applyFinish(
                             rcodec, srcid, method, lsession, loid, msg);
                         if (cid !== null && result &&
                                 typeof result.then === 'function' &&
@@ -1295,7 +1307,7 @@ class Connection {
                         Promise.resolve(result)
                             .then(result => {
                                 if (cid !== null) {
-                                    if (this.lcalls.hasOwnProperty(cid)) {
+                                    if (hasOwnProperty.call(this.lcalls, cid)) {
                                         delete this.lcalls[cid];
                                     }
                                     this.respond(srcid, cid, result, lcodec);
@@ -1303,7 +1315,7 @@ class Connection {
                             })
                             .catch(exc => {
                                 // the method threw an asynchronous exception
-                                if (this.lcalls.hasOwnProperty(cid)) {
+                                if (hasOwnProperty.call(this.lcalls, cid)) {
                                     delete this.lcalls[cid];
                                 }
                                 this.onError(srcid, cid, exc, lcodec);
@@ -1321,13 +1333,13 @@ class Connection {
                 this.bridgeCall(dstid, cid, header, body);
             }
         } else {
-            let cancelid = header.hasOwnProperty('cancel') ?
+            const cancelid = hasOwnProperty.call(header, 'cancel') ?
                 header.cancel : null;
             if (cancelid !== null) {
                 // this is a cancel request
                 if (dstid === null) {
-                    if (this.lcalls.hasOwnProperty(cancelid)) {
-                        let lcall = this.lcalls[cancelid];
+                    if (hasOwnProperty.call(this.lcalls, cancelid)) {
+                        const lcall = this.lcalls[cancelid];
                         delete this.lcalls[cancelid];
                         lcall.cancel();
                     }
@@ -1336,10 +1348,10 @@ class Connection {
                 }
             } else {
                 // this is a response
-                let cid = header.id;
+                const cid = header.id;
                 if (dstid === null) {
-                    if (this.rcalls.hasOwnProperty(cid)) {
-                        let rcall = this.rcalls[cid];
+                    if (hasOwnProperty.call(this.rcalls, cid)) {
+                        const rcall = this.rcalls[cid];
                         delete this.rcalls[cid];
                         try {
                             let msg;
@@ -1364,7 +1376,7 @@ class Connection {
     }
 
     bridgeCall(dstid, cid, header, body) {
-        let dst = this.registry.get(dstid);
+        const dst = this.registry.get(dstid);
         if (dst === void 0) {
             this.onError(null, cid,
                 new Errors.DisconnectedError('Unknown connection: ' + dstid));
@@ -1375,7 +1387,7 @@ class Connection {
             dst.send(header, body);
 
             if (cid !== null) {
-                if (!dst.bcalls.hasOwnProperty(this.id)) {
+                if (!hasOwnProperty.call(dst.bcalls, this.id)) {
                     dst.bcalls[this.id] = {};
                 }
                 dst.bcalls[this.id][cid] = 1;
@@ -1384,10 +1396,10 @@ class Connection {
     }
 
     bridgeResponse(dstid, cid, header, body) {
-        let dst = this.registry.get(dstid);
+        const dst = this.registry.get(dstid);
         if (dst !== void 0) {
-            if (this.bcalls.hasOwnProperty(dstid) &&
-                    this.bcalls[dstid].hasOwnProperty(cid)) {
+            if (hasOwnProperty.call(this.bcalls, dstid) &&
+                    hasOwnProperty.call(this.bcalls[dstid], cid)) {
                 delete this.bcalls[dstid][cid];
             }
 
@@ -1398,7 +1410,7 @@ class Connection {
     }
 
     unmarshalLsession(lsid) {
-        if (!this.lsessions.hasOwnProperty(lsid)) {
+        if (!hasOwnProperty.call(this.lsessions, lsid)) {
             throw new Errors.LookupError('Unknown session: ' + lsid);
         }
         return this.lsessions[lsid];
@@ -1407,7 +1419,7 @@ class Connection {
     applyBegin(rcodec, srcid, method, msg) {
         let loid = null;
         let lsid = null;
-        if (msg.hasOwnProperty('this')) {
+        if (hasOwnProperty.call(msg, 'this')) {
             let lref = msg.this;
             if (Array.isArray(lref)) {
                 throw new TypeError('Malformed this object');
@@ -1415,10 +1427,10 @@ class Connection {
                 if (lref instanceof Reference) {
                     lref = lref.ref;
                 }
-                if (lref.hasOwnProperty(OBJECT_ID)) {
+                if (hasOwnProperty.call(lref, OBJECT_ID)) {
                     loid = lref[OBJECT_ID];
                 }
-                if (lref.hasOwnProperty('rsid')) {
+                if (hasOwnProperty.call(lref, 'rsid')) {
                     lsid = lref.rsid;
                 }
             }
@@ -1427,15 +1439,15 @@ class Connection {
     }
 
     applyFinish(rcodec, srcid, method, lsession, loid, msg) {
-        let lobj = lsession.unmarshalId(loid);
-        let params = msg.hasOwnProperty('params') ?
+        const lobj = lsession.unmarshalId(loid);
+        const params = hasOwnProperty.call(msg, 'params') ?
             lsession.unmarshalAll(rcodec, msg.params, srcid) : [];
 
         let a = lobj[method];
         if (a === void 0) {
             if (method.substring(0, 4) == 'set_' && params.length == 1) {
                 // direct property assignment
-                let name = method.substring(4);
+                const name = method.substring(4);
                 if (isPrivate(name)) {
                     throw new Errors.AttributeError(
                         "Cannot assign to private attribute '" + name + "'");
@@ -1491,27 +1503,27 @@ class Connection {
     }
 
     getresult(rcodec, rsession, msg) {
-        if (msg.hasOwnProperty('result')) {
+        if (hasOwnProperty.call(msg, 'result')) {
             return rsession.unmarshalAll(rcodec, msg.result);
         }
 
-        if (!msg.hasOwnProperty('error')) {
+        if (!hasOwnProperty.call(msg, 'error')) {
             throw new Error('Unspecified error');
         }
 
         // attempt to unmarshal error object; fallback to generic Error
-        let error = msg.error;
+        const error = msg.error;
         let message = '';
-        if (error.hasOwnProperty('message')) {
+        if (hasOwnProperty.call(error, 'message')) {
             message = '' + error.message;
         }
         if (message === '') {
             message = 'Unspecified error';
         }
         let Etype;
-        if (error.hasOwnProperty('name')) {
-            let name = error.name;
-            if (Errors.hasOwnProperty(name)) {
+        if (hasOwnProperty.call(error, 'name')) {
+            const name = error.name;
+            if (hasOwnProperty.call(Errors, name)) {
                 Etype = Errors[name];
             } else {
                 Etype = globals[name];
@@ -1525,11 +1537,11 @@ class Connection {
                 }
             }
         }
-        let exc = new Etype(message);
-        if (error.hasOwnProperty('stack')) {
-            let stack = error.stack;
+        const exc = new Etype(message);
+        if (hasOwnProperty.call(error, 'stack')) {
+            const stack = error.stack;
             if (typeof stack === 'string') {
-                if (exc.hasOwnProperty('stack') &&
+                if (hasOwnProperty.call(exc, 'stack') &&
                         typeof exc.stack === 'string') {
                     exc.stack = stack.trim() + '\n\nThe above exception was ' +
                         'the direct cause of the following exception:\n\n' +
@@ -1583,7 +1595,7 @@ class Connection {
 
         // dispose of outstanding bridged calls (as callee)
         Object.keys(this.bcalls).forEach(srcid => {
-            let src = this.registry.get(srcid);
+            const src = this.registry.get(srcid);
             if (src !== void 0) {
                 Object.keys(this.bcalls[srcid]).forEach(cid => {
                     src.error(
@@ -1596,9 +1608,9 @@ class Connection {
 
         // dispose of outstanding bridged calls (as caller)
         Object.keys(this.registry.objects).forEach(id => {
-            let conn = this.registry.objects[id];
-            if (conn.bcalls.hasOwnProperty(this.id)) {
-                let cids = conn.bcalls[this.id];
+            const conn = this.registry.objects[id];
+            if (hasOwnProperty.call(conn.bcalls, this.id)) {
+                const cids = conn.bcalls[this.id];
                 delete conn.bcalls[this.id];
                 if (!conn.closed()) {
                     Object.keys(cids).forEach(cid => {
@@ -1614,7 +1626,7 @@ class Connection {
             throw new Errors.DisconnectedError('Connection closed');
         }
 
-        let header = {id: rcid, method};
+        const header = {id: rcid, method};
         if (dstid !== null) {
             header.dst = dstid;
         }
@@ -1647,7 +1659,7 @@ class Connection {
         if (result === void 0) {
             result = null;
         }
-        let header = {id: lcid};
+        const header = {id: lcid};
         if (srcid !== null) {
             header.dst = srcid;
         }
@@ -1668,11 +1680,11 @@ class Connection {
     }
 
     error(srcid, lcid, exc, lcodec = null) {
-        let header = {id: lcid};
+        const header = {id: lcid};
         if (srcid !== null) {
             header.dst = srcid;
         }
-        let error = {name: exc.name, message: exc.message};
+        const error = {name: exc.name, message: exc.message};
         if (typeof exc.stack === 'string') {
             error.stack = exc.stack;
         }
@@ -1746,19 +1758,20 @@ class Connection {
     }
 }
 
-let connect = function(whither, options = {}) {
-    let conn = new Connection(whither, options);
+const connect = function(whither, options = {}) {
+    const conn = new Connection(whither, options);
     return conn._enter();
 };
 
-let serve = function(port, options = {}) {
-    let Server = options.hasOwnProperty('Server') ? options.Server : WSServer;
-    let server = new Server({port});
+const serve = function(port, options = {}) {
+    const Server = hasOwnProperty.call(options, 'Server') ?
+        options.Server : WSServer;
+    const server = new Server({port});
     server.on('connection', ws => connect(ws, options));
     return server;
 };
 
-let Eider = {
+const Eider = {
     asyncIterator,
     Bridge,
     Codec,

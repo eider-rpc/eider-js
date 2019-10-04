@@ -18,16 +18,16 @@ limitations under the License.
 /* global gc */
 /* eslint-env node, mocha */
 
-let assert = require('assert');
-let Eider = require('..');
+const assert = require('assert');
+const Eider = require('..');
 
-let WS_LIB = process.env.EIDER_WS_LIB || 'ws';
-let WS = require(WS_LIB);
+const WS_LIB = process.env.EIDER_WS_LIB || 'ws';
+const WS = require(WS_LIB);
 
 describe('Eider', function() {
     function aiter2array(it) {
         return it.then(them => {
-            let xs = [];
+            const xs = [];
             return Eider.forAwait(them, x => {
                 xs.push(x);
             }).then(() => xs);
@@ -101,7 +101,7 @@ describe('Eider', function() {
         }
 
         next() {
-            let i = this._start;
+            const i = this._start;
             if (i >= this._stop) {
                 return {done: true};
             }
@@ -174,7 +174,7 @@ describe('Eider', function() {
 
         cancellable() {
             let resolve;
-            let p = new Promise(r => {
+            const p = new Promise(r => {
                 resolve = r;
             });
             p.cancel = () => {
@@ -191,11 +191,11 @@ describe('Eider', function() {
         map(f, xs, async = true) {
             if (async) {
                 let i = 0;
-                let ys = [];
-                let iter = () =>
-                    (i >= xs.length)
-                        ? ys
-                        : f(xs[i]).then(x => {
+                const ys = [];
+                const iter = () =>
+                    (i >= xs.length) ?
+                        ys :
+                        f(xs[i]).then(x => {
                             ys.push(x);
                             ++i;
                             return iter();
@@ -259,10 +259,10 @@ describe('Eider', function() {
     let conn3;
     let rrootBin;
 
-    let KEYWORDS = `__*__ bridge cancel dst error format id lformat lsid message
-        method name params result rsid src stack this`.split(/\s+/);
+    const KEYWORDS = `__*__ bridge cancel dst error format id lformat lsid
+        message method name params result rsid src stack this`.split(/\s+/);
 
-    let GARBAGE_IN = {
+    const GARBAGE_IN = {
         'x': 'y',
         'z': [2, undefined, null, true,
             {'undef': undefined, 'foo bar': 'baz'}],
@@ -275,7 +275,7 @@ describe('Eider', function() {
         'b': new Boolean(false)
         /* eslint-enable no-new-wrappers */
     };
-    let GARBAGE_OUT = {
+    const GARBAGE_OUT = {
         'x': 'y',
         // undefined is converted to null in arrays, and omitted in objects
         'z': [2, null, null, true, {'foo bar': 'baz'}],
@@ -297,7 +297,7 @@ describe('Eider', function() {
         return new Promise((resolve, reject) => {
             server = Eider.serve(0, {root: RemoteAPI, Server: WS.Server});
             server.on('listening', () => {
-                let url = 'ws://localhost:' + server.address().port;
+                const url = 'ws://localhost:' + server.address().port;
                 resolve(Promise.all([
                     Eider.connect(new WS(url), {
                         root: TargetAPI
@@ -366,7 +366,7 @@ describe('Eider', function() {
     });
 
     it('cancel a remote method call', function() {
-        let c = rroot.cancellable();
+        const c = rroot.cancellable();
         setTimeout(c.cancel.bind(c), 10);
         return c
             .then(
@@ -503,7 +503,7 @@ describe('Eider', function() {
     });
 
     it('iterate over a remote sequence', function() {
-        let seq = ['foo', 'baz', 99, 'eggs'];
+        const seq = ['foo', 'baz', 99, 'eggs'];
         return aiter2array(rroot.new_Sequence(seq))
             .then(arr =>
                 assert.deepEqual(arr, seq)
@@ -558,11 +558,12 @@ describe('Eider', function() {
             .then(p => assert.deepEqual(p, [1, 4, 9, 16]));
     });
 
-    it('call an exception-raising local method remotely, without remote ' +
+    it(
+        'call an exception-raising local method remotely, without remote ' +
         'post-processing',
         /* eslint-disable indent */
         function() {
-            let v = lroot.new_Value(42);
+            const v = lroot.new_Value(42);
             return rroot.call(v.divide.bind(v), 0)
                 .then(
                     () => assert(false),
@@ -573,11 +574,12 @@ describe('Eider', function() {
         /* eslint-enable indent */
     );
 
-    it('call an exception-raising local method remotely, with remote ' +
+    it(
+        'call an exception-raising local method remotely, with remote ' +
         'post-processing',
         /* eslint-disable indent */
         function() {
-            let v = lroot.new_Value(42);
+            const v = lroot.new_Value(42);
             return rroot.map(v.divide.bind(v), [3, 1, 0, 7])
                 .then(
                     () => assert(false),
@@ -617,7 +619,7 @@ describe('Eider', function() {
     });
 
     it('pass a local native object to a remote call', function() {
-        let n = new NativeObject(42);
+        const n = new NativeObject(42);
         return rroot.passthru(n).then(m => {
             assert(Object.is(n, m));
             return rroot.passthru(nativeFunction).then(m =>
@@ -634,7 +636,7 @@ describe('Eider', function() {
     });
 
     it('call a native method remotely', function() {
-        let n = new NativeObject(42);
+        const n = new NativeObject(42);
         return rroot.call(n.add.bind(n), 3).then(() =>
             assert.equal(45, n.x)
         );
@@ -647,7 +649,7 @@ describe('Eider', function() {
     });
 
     it('call an anonymous native function remotely', function() {
-        let x = [];
+        const x = [];
         return rroot.storeCb(y => x.push(y)).then(() =>
             rroot.callCb(42).then(() =>
                 assert.deepStrictEqual([42], x)
@@ -704,7 +706,7 @@ describe('Eider', function() {
     });
 
     it('pass binary data using msgpack', function() {
-        let buf = new Int32Array(7);
+        const buf = new Int32Array(7);
         for (let i = 0; i < buf.length; ++i) {
             buf[i] = i;
         }
@@ -729,7 +731,7 @@ describe('Eider', function() {
 
     it('pass object with special "__*__" key', function() {
         // only works with out-of-band codecs
-        let obj = {'__*__': 42, 'rsid': 99};
+        const obj = {'__*__': 42, 'rsid': 99};
         return rrootMsgpack.passthru(obj)
             .then(x => assert.deepEqual(x, obj));
     });
