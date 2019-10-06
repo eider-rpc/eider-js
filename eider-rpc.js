@@ -146,7 +146,7 @@ const forAwait = (iterable, body) =>
 const OBJECT_ID = '__*__';
 
 // Many of the following errors correspond to built-in Python exception types.
-const Errors = {}; [
+const Errors = Object.create(null); [
     'AttributeError',
     'CancelledError',
     'DisconnectedError',
@@ -193,14 +193,15 @@ class Codec {
         if (name === null) {
             return null;
         }
-        if (hasOwnProperty.call(Codec.registry, name)) {
-            return Codec.registry[name];
+        const codec = Codec.registry[name];
+        if (codec === void 0) {
+            throw new Errors.LookupError('Unknown format: ' + name);
         }
-        throw new Errors.LookupError('Unknown format: ' + name);
+        return codec;
     }
 }
 
-Codec.registry = {};
+Codec.registry = Object.create(null);
 
 new Codec(
     'json',
@@ -415,14 +416,14 @@ class Session {
 
 class LocalSession extends Session {
     constructor(conn, lsid, rootFactory = null, lformat = null) {
-        if (hasOwnProperty.call(conn.lsessions, lsid)) {
+        if (lsid in conn.lsessions) {
             throw new Errors.RuntimeError('Session ID in use: ' + lsid);
         }
 
         super(conn, lformat);
         this.lsid = lsid;
         this.nextloid = 0;
-        this.objects = {};
+        this.objects = Object.create(null);
 
         conn.lsessions[lsid] = this;
         try {
@@ -462,10 +463,11 @@ class LocalSession extends Session {
     }
 
     unmarshalId(loid) {
-        if (!hasOwnProperty.call(this.objects, loid)) {
+        const lobj = this.objects[loid];
+        if (lobj === void 0) {
             throw new Errors.LookupError('Unknown object: ' + loid);
         }
-        return this.objects[loid];
+        return lobj;
     }
 
     // In createBridge, default formats to json rather than None because
@@ -519,7 +521,7 @@ class NativeSession extends LocalSession {
             return super.free(null); // root
         }
 
-        if (!hasOwnProperty.call(this.objects, loid)) {
+        if (!(loid in this.objects)) {
             throw new Errors.LookupError('Unknown object: ' + loid);
         }
         delete this.objects[loid];
@@ -963,7 +965,7 @@ class RemoteSessionBase extends Session {
         // the returned Promise is cancellable (Promises derived from it by
         // then() are not)
         rcall.cancel = () => {
-            if (hasOwnProperty.call(this.conn.rcalls, rcid)) {
+            if (rcid in this.conn.rcalls) {
                 const rcall = this.conn.rcalls[rcid];
                 delete this.conn.rcalls[rcid];
                 const msg = {cancel: rcid};
@@ -1085,7 +1087,7 @@ Bridge.help =
 
 class Registry {
     constructor() {
-        this.objects = {};
+        this.objects = Object.create(null);
         this.nextid = 0;
     }
 
@@ -1096,9 +1098,7 @@ class Registry {
     }
 
     get(id) {
-        if (hasOwnProperty.call(this.objects, id)) {
-            return this.objects[id];
-        }
+        return this.objects[id];
     }
 
     remove(id) {
@@ -1110,11 +1110,13 @@ const globalRegistry = new Registry();
 
 class Connection {
     constructor(whither, options = {}) {
-        if (hasOwnProperty.call(options, 'rootFactory')) {
+        // Remove prototype to simplify property access
+        options = Object.assign(Object.create(null), options);
+
+        if ('rootFactory' in options) {
             this.rootFactory = options.rootFactory;
         } else {
-            const Root = hasOwnProperty.call(options, 'root') ?
-                options.root : LocalRoot;
+            const Root = options.root || LocalRoot;
             this.rootFactory = lsession => new Root(lsession);
         }
 
@@ -1122,38 +1124,29 @@ class Connection {
             open: [],
             close: []
         };
-        const on = hasOwnProperty.call(options, 'on') ? options.on : {};
-        if (hasOwnProperty.call(on, 'open')) {
+        const on = Object.assign(Object.create(null), options.on || {});
+        if ('open' in on) {
             this.on('open', on.open);
         }
-        if (hasOwnProperty.call(on, 'close')) {
+        if ('close' in on) {
             this.on('close', on.close);
         }
 
-        this.logfn = hasOwnProperty.call(options, 'log') ?
-            options.log :
+        this.logfn = options.log ||
             ((level, ...args) => {
                 // eslint-disable-next-line no-console
                 console.log(LogLevel[level] || 'Unknown', ...args);
             });
-        this.logLevel = hasOwnProperty.call(options, 'logLevel') ?
-            options.logLevel : LOG_WARNING;
-        this.lencode = Codec.registry[
-            hasOwnProperty.call(options, 'lformat') ? options.lformat : 'json'
-        ].encode;
-        this.rcodec = Codec.registry[
-            hasOwnProperty.call(options, 'rformat') ? options.rformat : 'json'
-        ];
-        this.rcodecBin = Codec.registry[
-            hasOwnProperty.call(options, 'rformatBin') ?
-                options.rformatBin : 'msgpack'
-        ];
+        this.logLevel = options.logLevel || LOG_WARNING;
+        this.lencode = Codec.registry[options.lformat || 'json'].encode;
+        this.rcodec = Codec.registry[options.rformat || 'json'];
+        this.rcodecBin = Codec.registry[options.rformatBin || 'msgpack'];
 
         // connection state
-        this.lsessions = {}; // local sessions
-        this.lcalls = {}; // local calls
-        this.rcalls = {}; // remote calls
-        this.bcalls = {}; // bridged calls
+        this.lsessions = Object.create(null); // local sessions
+        this.lcalls = Object.create(null); // local calls
+        this.rcalls = Object.create(null); // remote calls
+        this.bcalls = Object.create(null); // bridged calls
         this.nextlsid = -2; // next local session id
         this.nextrsid = 0; // next remote session id
         this.nextrcid = 0; // next remote call id
@@ -1168,11 +1161,7 @@ class Connection {
         new NativeSession(this, -1, (lsession => new LocalRoot(lsession)));
 
         // register the connection
-        if (hasOwnProperty.call(options, 'registry')) {
-            this.registry = options.registry;
-        } else {
-            this.registry = globalRegistry;
-        }
+        this.registry = options.registry || globalRegistry;
         this.id = this.registry.add(this);
 
         const ws = (typeof whither === 'string') ? new WS(whither) : whither;
@@ -1307,17 +1296,13 @@ class Connection {
                         Promise.resolve(result)
                             .then(result => {
                                 if (cid !== null) {
-                                    if (hasOwnProperty.call(this.lcalls, cid)) {
-                                        delete this.lcalls[cid];
-                                    }
+                                    delete this.lcalls[cid];
                                     this.respond(srcid, cid, result, lcodec);
                                 }
                             })
                             .catch(exc => {
                                 // the method threw an asynchronous exception
-                                if (hasOwnProperty.call(this.lcalls, cid)) {
-                                    delete this.lcalls[cid];
-                                }
+                                delete this.lcalls[cid];
                                 this.onError(srcid, cid, exc, lcodec);
                             });
                     } catch (exc) {
@@ -1338,7 +1323,7 @@ class Connection {
             if (cancelid !== null) {
                 // this is a cancel request
                 if (dstid === null) {
-                    if (hasOwnProperty.call(this.lcalls, cancelid)) {
+                    if (cancelid in this.lcalls) {
                         const lcall = this.lcalls[cancelid];
                         delete this.lcalls[cancelid];
                         lcall.cancel();
@@ -1350,7 +1335,7 @@ class Connection {
                 // this is a response
                 const cid = header.id;
                 if (dstid === null) {
-                    if (hasOwnProperty.call(this.rcalls, cid)) {
+                    if (cid in this.rcalls) {
                         const rcall = this.rcalls[cid];
                         delete this.rcalls[cid];
                         try {
@@ -1387,8 +1372,8 @@ class Connection {
             dst.send(header, body);
 
             if (cid !== null) {
-                if (!hasOwnProperty.call(dst.bcalls, this.id)) {
-                    dst.bcalls[this.id] = {};
+                if (!(this.id in dst.bcalls)) {
+                    dst.bcalls[this.id] = Object.create(null);
                 }
                 dst.bcalls[this.id][cid] = 1;
             }
@@ -1398,8 +1383,7 @@ class Connection {
     bridgeResponse(dstid, cid, header, body) {
         const dst = this.registry.get(dstid);
         if (dst !== void 0) {
-            if (hasOwnProperty.call(this.bcalls, dstid) &&
-                    hasOwnProperty.call(this.bcalls[dstid], cid)) {
+            if (dstid in this.bcalls) {
                 delete this.bcalls[dstid][cid];
             }
 
@@ -1410,7 +1394,7 @@ class Connection {
     }
 
     unmarshalLsession(lsid) {
-        if (!hasOwnProperty.call(this.lsessions, lsid)) {
+        if (!(lsid in this.lsessions)) {
             throw new Errors.LookupError('Unknown session: ' + lsid);
         }
         return this.lsessions[lsid];
@@ -1523,7 +1507,7 @@ class Connection {
         let Etype;
         if (hasOwnProperty.call(error, 'name')) {
             const name = error.name;
-            if (hasOwnProperty.call(Errors, name)) {
+            if (name in Errors) {
                 Etype = Errors[name];
             } else {
                 Etype = globals[name];
@@ -1609,7 +1593,7 @@ class Connection {
         // dispose of outstanding bridged calls (as caller)
         Object.keys(this.registry.objects).forEach(id => {
             const conn = this.registry.objects[id];
-            if (hasOwnProperty.call(conn.bcalls, this.id)) {
+            if (this.id in conn.bcalls) {
                 const cids = conn.bcalls[this.id];
                 delete conn.bcalls[this.id];
                 if (!conn.closed()) {
