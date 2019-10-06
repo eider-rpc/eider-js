@@ -14,7 +14,7 @@ env:
     # need C++11-compatible compiler to build the weak package
     - CXX=g++-4.8
   matrix:
-    - EIDER_WS_LIB=ws
+    - EIDER_JS_WS_LIB=ws
 addons:
   apt:
     sources:
