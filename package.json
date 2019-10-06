@@ -23,7 +23,7 @@
     "weak": "^1.0.1"
   },
   "devDependencies": {
-    "babel-minify": "^0.3.0",
+    "babel-minify": "^0.5.1",
     "bufferutil": "^4.0.1",
     "eslint": "^6.5.1",
     "eslint-config-google": "^0.14.0",
