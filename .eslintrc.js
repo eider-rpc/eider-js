@@ -32,6 +32,9 @@ module.exports = {
             "error",
             (os.platform() === 'win32' ? "windows" : "unix")
         ],
+        "no-prototype-builtins": [
+            "error"
+        ],
         "quotes": [
             "error",
             "single",
