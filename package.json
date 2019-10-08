@@ -24,11 +24,9 @@
   },
   "devDependencies": {
     "babel-minify": "^0.5.1",
-    "bufferutil": "^4.0.1",
     "eslint": "^6.5.1",
     "eslint-config-google": "^0.14.0",
     "mocha": "^6.2.1",
-    "utf-8-validate": "^5.0.2",
     "ws": "^6.2.1"
   }
 }
